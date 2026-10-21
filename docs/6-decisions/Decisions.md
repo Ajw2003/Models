@@ -3,6 +3,23 @@
 The running log of what was decided in this repo, when and why. Newest entry at the top. Entries
 are never rewritten; a later decision flips an old entry's Status to Superseded with a pointer.
 
+## 2026-10-21 — Goose boss animation build plan approved
+
+**Context.** The design approved earlier today became a build plan of five issues under #1
+(Animate the goose boss: rig and 13 clips): #2 the rig, #3 the supporting clips, #4 attack group
+one, #5 attack group two with the phase transition, #6 export, manifest and pull request.
+
+**Decision.** aj approved the build plan ("Build plan approved: goose boss animation 1 2A 3A 4A*").
+The work runs in that order, one builder per issue. Bones are named from the goose's own point of
+view (the goose faces -Y, so +X is its left, `.L`), the Blender convention; `goose_design.py`'s
+part tags, which call +X "R", are mapped across in one table in `build_rig.py`.
+
+**Why.** The rig must exist before any clip, and the supporting idle pose is what every attack
+starts from and returns to. The bone naming follows Blender because its mirror tools and any
+engine importer expect it; the design file's naming is from the viewer's side.
+
+**Status.** Standing.
+
 ## 2026-10-21 — Goose boss animation: seven attacks, The Crown Wakes, the playable set, this repo only
 
 **Context.** aj asked for the goose boss (`art/goose`, The Honking Deep) to be animated as a
