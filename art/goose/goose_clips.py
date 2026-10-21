@@ -731,6 +731,9 @@ def render_clip(rig, name, tmp):
         d.text((x + 12, y + 10), f"{name}  frame {f}  ({f / FPS:.2f} s)", fill="#14120E", font=font)
     sheet_path = os.path.join(CLIPS_DIR, f"{name}_sheet.png")
     sheet.save(sheet_path)
+    if os.environ.get('GOOSE_STILLS_ONLY'):
+        rig.arm.animation_data.action = None
+        return times
     # --- mp4: every second frame at 15 fps, 480 px, 8 samples
     setup_scene(480, 8)
     t0 = time.time()
