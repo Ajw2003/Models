@@ -585,15 +585,15 @@ def peck_pose(rig, t, k=1.0):
     s = peck_s(t)
     side_s = peck_s(t - 0.05 * (1 - smooth((t - 1.8) / 0.4)))
     pose = idle_pose(0.0)
-    back, fore = (-55.0, 120.0 * k) if True else (0, 0)
+    back, fore = -55.0, 135.0 * k
     main = back * -s if s < 0 else fore * s
     sd_s = side_s
     side = (-22.0 * -sd_s) if sd_s < 0 else (50.0 * sd_s * k)
     tremble = 2.4 * peck_hold(t) * math.sin(2 * math.pi * 9.0 * t)
     pose = trio(pose, None, None, None, main + tremble * 1.0, side + tremble * 0.6,
-                head_main=(-12.0 * -s if s < 0 else 28.0 * s * k), head_side=(10.0 * sd_s))
-    drop = max(0.0, s) * 0.28 * k + max(0.0, -s) * -0.05
-    pose = add_pose(pose, {"pelvis": {"t": (0, 0.12 * max(0.0, -s), -drop)}, "root": {"rot": (9.0 * max(0.0, s) * k, 0, 0)}})
+                head_main=(-12.0 * -s if s < 0 else 60.0 * s * k), head_side=(10.0 * sd_s))
+    drop = max(0.0, s) * 0.55 * k + max(0.0, -s) * -0.05
+    pose = add_pose(pose, {"pelvis": {"t": (0, 0.12 * max(0.0, -s), -drop)}, "root": {"rot": (20.0 * max(0.0, s) * k, 0, 0)}})
     return pose, planted(rig)
 
 
@@ -710,9 +710,9 @@ def gust_pose(rig, t, k=1.0):
                                    f"wing_fore.{sd}": {"rot": (0, sg * -8.0 * e, sg * 12.0 * e)},
                                    f"wing_hand.{sd}": {"rot": (0, sg * -10.0 * e, sg * 10.0 * e)}})
         else:
-            pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * 24.0 * g, sg * -52.0 * g)},
-                                   f"wing_fore.{sd}": {"rot": (0, sg * 12.0 * g, sg * -10.0 * g)},
-                                   f"wing_hand.{sd}": {"rot": (0, sg * 26.0 * g, sg * -8.0 * g)}})
+            pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * 34.0 * g, sg * -72.0 * g)},
+                                   f"wing_fore.{sd}": {"rot": (0, sg * 16.0 * g, sg * -16.0 * g)},
+                                   f"wing_hand.{sd}": {"rot": (0, sg * 34.0 * g, sg * -12.0 * g)}})
         pose = add_pose(pose, {f"wing_finger_1.{sd}": {"rot": (0, 0, sg * -18.0 * spr)},
                                f"wing_finger_3.{sd}": {"rot": (0, 0, sg * 18.0 * spr)}})
     pose = trio(pose, None, None, None, -30.0 * lean, -26.0 * lean, head_main=-14.0 * lean, head_side=-12.0 * lean)
@@ -1005,6 +1005,15 @@ def render_clip(rig, name, tmp):
     n = int(act.frame_end)
     loop = bool(act.get("loop"))
     frames = [int(round(x)) for x in np.linspace(0, n, 8, endpoint=not loop)]
+    if os.environ.get("GOOSE_FRAMES"):  # debugging: just these frames, into the scratch folder, no sheet
+        setup_scene(600, 16, CAM_TARGET.get(name, (0, 0.3, 3.0)))
+        for f in [int(x) for x in os.environ["GOOSE_FRAMES"].split(",")]:
+            sc.frame_set(f)
+            sc.render.filepath = os.path.join(tmp, f"{name}_dbg_{f:03d}.png")
+            bpy.ops.render.render(write_still=True)
+            composite(sc.render.filepath)
+        rig.arm.animation_data.action = None
+        return {"debug": True}
     times = {}
     # --- stills
     setup_scene(600, 16, CAM_TARGET.get(name, (0, 0.3, 3.0)))

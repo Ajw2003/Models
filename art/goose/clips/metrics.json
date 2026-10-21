@@ -9,7 +9,7 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": 0.0,
-  "measure_seconds": 2.6
+  "measure_seconds": 2.5
  },
  "walk": {
   "frames": 48,
@@ -70,7 +70,7 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
-  "measure_seconds": 0.8
+  "measure_seconds": 0.7
  },
  "death": {
   "frames": 120,
@@ -82,15 +82,15 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
-  "measure_seconds": 2.9
+  "measure_seconds": 2.4
  },
  "hesitation_peck": {
   "frames": 66,
   "seconds": 2.2,
   "loop": false,
-  "min_z_m": 0.0039,
-  "min_z_frame": 60,
-  "min_z_vertex_bone": "leg_toes.L",
+  "min_z_m": 0.0022,
+  "min_z_frame": 50,
+  "min_z_vertex_bone": "spine_3",
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
@@ -175,7 +175,7 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
-  "measure_seconds": 1.2,
+  "measure_seconds": 1.3,
   "hit_marker_frame": 30,
   "hit_time_s": 1.0,
   "hit_normalised": 0.5,
