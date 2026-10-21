@@ -401,7 +401,7 @@ DEATH_T = 4.0
 T_BUCKLE, T_ROLL, T_NECKS = 0.35, 1.4, 2.2
 
 
-def death_body(t, rig):
+def death_body(t, rig, neck_scale=1.0):
     """Body pose for the death at time t (without the floor fit)."""
     base = idle_pose(0.0)
     a_recoil = pchip([(0, 0), (0.06, -0.1), (0.3, 0.8), (0.9, 0.35), (1.4, 0.1)], t)
@@ -420,7 +420,7 @@ def death_body(t, rig):
                                f"wing_fore.{s}": {"brot": (0, 0, sg * 40 * fold)},
                                f"wing_hand.{s}": {"brot": (0, 0, sg * 70 * fold)}})
     # necks fall last: bend toward the floor (world Y once it lies on its side)
-    fall = pchip([(0, 0), (T_NECKS, 0), (2.9, 0.75), (3.4, 1.05), (3.8, 1.0), (4.0, 1.0)], t)
+    fall = pchip([(0, 0), (T_NECKS, 0), (2.9, 0.75), (3.4, 1.05), (3.8, 1.0), (4.0, 1.0)], t) * neck_scale
     for k, chain in NECKS.items():
         amt = (70 if k == "main" else 62) * fall
         pose = add_pose(pose, {n: {"brot": (0, amt / len(chain), 0)} for n in chain})
@@ -477,33 +477,40 @@ def solve_clip(rig, name):
             keys.append((f, rig.channels()))
     elif name == "death":
         n = int(round(DEATH_T * FPS))
-        plant_t = None
         attach = {}
-        for f in range(0, n + 1):
-            t = f / FPS
-            body = death_body(t, rig)
+
+        def pose_it(body, t):
+            """Apply a death pose: feet planted until the roll starts, then riding with the body."""
             if t <= T_ROLL:
                 rig.apply_pose(body, planted(rig))
-                if (f + 1) / FPS > T_ROLL and not attach:  # last planted frame: remember the feet relative to the body
-                    mb = rig.body_matrix().inverted()
-                    attach = {s: mb @ rig.rest_foot[s] for s in "LR"}
             else:
-                # first apply the body, then put the feet where they sit in the body frame
                 rig.apply_pose(body)
                 mb = rig.body_matrix()
-                targets = {s: mb @ attach[s] for s in "LR"}
-                rig.apply_pose(body, planted(rig, FWD, targets))
-            # floor fit: lift the root so nothing is below the floor, and let it fall into place
+                rig.apply_pose(body, planted(rig, FWD, {s: mb @ attach[s] for s in "LR"}))
+
+        for f in range(0, n + 1):
+            t = f / FPS
+            if (f + 1) / FPS > T_ROLL and not attach:  # last planted frame: remember the feet relative to the body
+                rig.apply_pose(death_body(t, rig, 0.0), planted(rig))
+                mb = rig.body_matrix().inverted()
+                attach = {s: mb @ rig.rest_foot[s] for s in "LR"}
+            # floor fit 1: lift the root until the body (necks held up) is clear of the floor
+            body = death_body(t, rig, 0.0)
+            pose_it(body, t)
             z = rig.min_z()
             lift = -z + 0.004 if z < 0.004 else 0.0
-            if lift:
-                body = add_pose(body, {"root": {"t": (0, 0, lift)}})
-                if t <= T_ROLL:
-                    rig.apply_pose(body, planted(rig))
+            # floor fit 2: let the necks fall as far as the floor allows (the heads rest on it), at most the full fall
+            lo, hi = 0.0, 1.0
+            for _ in range(9):
+                mid = (lo + hi) / 2
+                trial = add_pose(death_body(t, rig, mid), {"root": {"t": (0, 0, lift)}})
+                pose_it(trial, t)
+                if rig.min_z() >= 0.002:
+                    lo = mid
                 else:
-                    rig.apply_pose(body)
-                    mb = rig.body_matrix()
-                    rig.apply_pose(body, planted(rig, FWD, {s: mb @ attach[s] for s in "LR"}))
+                    hi = mid
+            body = add_pose(death_body(t, rig, lo), {"root": {"t": (0, 0, lift)}})
+            pose_it(body, t)
             keys.append((f, rig.channels()))
         keys[-1] = (n, keys[-1][1])
     else:
