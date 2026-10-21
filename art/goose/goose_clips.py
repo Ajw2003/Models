@@ -405,7 +405,7 @@ def turn_body(t):
     return add_pose(body, idle_pose(t * 0.0 + 0.0), 0.0)
 
 
-L_FORWARD, L_ACROSS = 95.0, 0.0  # how the neck that ends underneath is laid out before the roll (degrees)
+L_FORWARD, L_ACROSS = 0.0, 60.0  # how the neck that ends underneath is laid out before the roll (degrees)
 DEATH_T = 4.0
 T_BUCKLE, T_ROLL, T_NECKS = 0.35, 1.4, 2.2
 
@@ -510,7 +510,7 @@ def solve_clip(rig, name):
             # floor fit 1: lift the root until the body (necks held up) is clear of the floor
             body = death_body(t, rig, 0.0)
             pose_it(body, t)
-            z = rig.min_z()
+            z = rig.min_z(body_only=True)
             lift = -z + 0.004 if z < 0.004 else 0.0
             # floor fit 2: let the necks fall as far as the floor allows (the heads rest on it), at most the full fall
             lo, hi = 0.0, 1.0
