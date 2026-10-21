@@ -6,12 +6,31 @@
   "tempo": 1.4,
   "loop": true,
   "min_z_m": 0.0039,
-  "min_z_frame": 76,
+  "min_z_frame": 124,
   "min_z_vertex_bone": "leg_toes.R",
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": 0.0,
-  "measure_seconds": 4.3
+  "measure_seconds": 4.4,
+  "effort_layer": {
+   "max_bone_rotation_deg": 3.0,
+   "top_bones_deg": {
+    "wing_shoulder.L": 3.0,
+    "wing_shoulder.R": 3.0,
+    "pelvis": 2.4,
+    "spine_3": 2.08,
+    "spine_2": 1.8,
+    "neck_L_3": 0.5
+   },
+   "pelvis_z_range_m": [
+    -0.038,
+    0.018
+   ],
+   "chest_scale_range": [
+    1.0,
+    1.045
+   ]
+  }
  },
  "walk": {
   "frames": 67,
@@ -26,6 +45,21 @@
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": 0.0,
   "measure_seconds": 1.7,
+  "effort_layer": {
+   "max_bone_rotation_deg": 2.0,
+   "top_bones_deg": {
+    "pelvis": 2.0,
+    "spine_1": 1.5
+   },
+   "pelvis_z_range_m": [
+    -0.07,
+    0.0
+   ],
+   "chest_scale_range": [
+    1.0,
+    1.0
+   ]
+  },
   "implied_ground_speed_mps": 0.4478,
   "stride_m": 0.6,
   "stance_fraction": 0.6,
@@ -63,12 +97,24 @@
   "tempo": 1.4,
   "loop": false,
   "min_z_m": 0.0039,
-  "min_z_frame": 39,
+  "min_z_frame": 53,
   "min_z_vertex_bone": "leg_toes.R",
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
-  "measure_seconds": 1.6
+  "measure_seconds": 1.6,
+  "effort_layer": {
+   "max_bone_rotation_deg": 0.0,
+   "top_bones_deg": {},
+   "pelvis_z_range_m": [
+    -0.1,
+    0.0
+   ],
+   "chest_scale_range": [
+    1.0,
+    1.0
+   ]
+  }
  },
  "hesitation_peck": {
   "frames": 92,
@@ -76,13 +122,33 @@
   "v1_frames": 66,
   "tempo": 1.3939,
   "loop": false,
-  "min_z_m": 0.002,
-  "min_z_frame": 70,
+  "min_z_m": 0.0022,
+  "min_z_frame": 77,
   "min_z_vertex_bone": "spine_3",
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
   "measure_seconds": 2.3,
+  "effort_layer": {
+   "max_bone_rotation_deg": 6.0,
+   "top_bones_deg": {
+    "spine_3": 6.0,
+    "neck_L_1": 4.69,
+    "neck_L_2": 4.69,
+    "neck_L_3": 4.69,
+    "neck_L_4": 4.69,
+    "neck_L_5": 4.69
+   },
+   "pelvis_z_range_m": [
+    -0.2,
+    0.016
+   ],
+   "chest_scale_range": [
+    1.0,
+    1.07
+   ],
+   "recovery_breaths": 1
+  },
   "markers": {
    "hit": {
     "frame": 69,
@@ -116,6 +182,26 @@
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
   "measure_seconds": 2.8,
+  "effort_layer": {
+   "max_bone_rotation_deg": 6.0,
+   "top_bones_deg": {
+    "spine_3": 6.0,
+    "neck_L_1": 4.7,
+    "neck_L_2": 4.7,
+    "neck_L_3": 4.7,
+    "neck_L_4": 4.7,
+    "neck_L_5": 4.7
+   },
+   "pelvis_z_range_m": [
+    -0.2,
+    0.009
+   ],
+   "chest_scale_range": [
+    1.0,
+    1.07
+   ],
+   "recovery_breaths": 1
+  },
   "markers": {
    "hit": {
     "frame": 73,
@@ -167,12 +253,32 @@
   "tempo": 1.4,
   "loop": false,
   "min_z_m": 0.002,
-  "min_z_frame": 30,
+  "min_z_frame": 27,
   "min_z_vertex_bone": "spine_3",
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
-  "measure_seconds": 3.4,
+  "measure_seconds": 3.7,
+  "effort_layer": {
+   "max_bone_rotation_deg": 6.0,
+   "top_bones_deg": {
+    "spine_3": 6.0,
+    "neck_L_1": 4.7,
+    "neck_L_2": 4.7,
+    "neck_L_3": 4.7,
+    "neck_L_4": 4.7,
+    "neck_L_5": 4.7
+   },
+   "pelvis_z_range_m": [
+    -0.2,
+    0.004
+   ],
+   "chest_scale_range": [
+    1.0,
+    1.07
+   ],
+   "recovery_breaths": 1
+  },
   "markers": {
    "hit": {
     "frame": 80,
@@ -200,12 +306,32 @@
   "tempo": 1.4,
   "loop": false,
   "min_z_m": 0.0039,
-  "min_z_frame": 21,
+  "min_z_frame": 56,
   "min_z_vertex_bone": "leg_toes.L",
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
   "measure_seconds": 2.1,
+  "effort_layer": {
+   "max_bone_rotation_deg": 6.0,
+   "top_bones_deg": {
+    "spine_3": 6.0,
+    "neck_R_1": 4.7,
+    "neck_R_2": 4.7,
+    "neck_R_3": 4.7,
+    "neck_R_4": 4.7,
+    "neck_R_5": 4.7
+   },
+   "pelvis_z_range_m": [
+    -0.2,
+    0.005
+   ],
+   "chest_scale_range": [
+    1.0,
+    1.07
+   ],
+   "recovery_breaths": 1
+  },
   "markers": {
    "hit": {
     "frame": 42,
@@ -233,12 +359,32 @@
   "tempo": 1.4028,
   "loop": false,
   "min_z_m": 0.0039,
-  "min_z_frame": 47,
+  "min_z_frame": 12,
   "min_z_vertex_bone": "leg_toes.L",
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
-  "measure_seconds": 2.8,
+  "measure_seconds": 2.7,
+  "effort_layer": {
+   "max_bone_rotation_deg": 6.0,
+   "top_bones_deg": {
+    "spine_3": 6.0,
+    "neck_R_1": 4.69,
+    "neck_R_2": 4.69,
+    "neck_R_3": 4.69,
+    "neck_R_4": 4.69,
+    "neck_R_5": 4.69
+   },
+   "pelvis_z_range_m": [
+    -0.2,
+    0.017
+   ],
+   "chest_scale_range": [
+    1.0,
+    1.07
+   ],
+   "recovery_breaths": 2
+  },
   "markers": {
    "hit": {
     "frame": 42,
@@ -265,13 +411,33 @@
   "v1_frames": 96,
   "tempo": 1.3958,
   "loop": false,
-  "min_z_m": 0.003,
-  "min_z_frame": 74,
+  "min_z_m": 0.0023,
+  "min_z_frame": 56,
   "min_z_vertex_bone": "crown_main",
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
-  "measure_seconds": 3.5,
+  "measure_seconds": 3.2,
+  "effort_layer": {
+   "max_bone_rotation_deg": 6.0,
+   "top_bones_deg": {
+    "spine_3": 6.0,
+    "neck_L_1": 4.7,
+    "neck_L_2": 4.7,
+    "neck_L_3": 4.7,
+    "neck_L_4": 4.7,
+    "neck_L_5": 4.7
+   },
+   "pelvis_z_range_m": [
+    -0.2,
+    0.023
+   ],
+   "chest_scale_range": [
+    1.0,
+    1.07
+   ],
+   "recovery_breaths": 3
+  },
   "markers": {
    "hit": {
     "frame": 50,
@@ -293,10 +459,10 @@
    "crown_R": 1.014
   },
   "head_main_at_hit_m": {
-   "forward_from_root": 4.26,
+   "forward_from_root": 4.22,
    "height": 1.59
   },
-  "head_main_max_forward_m": 4.31,
+  "head_main_max_forward_m": 4.47,
   "first_frame_vs_idle0_pose_diff_m": 0.0,
   "last_frame_vs_idle0_pose_diff_m": 0.0,
   "root_peak_z_m": 0.0,
@@ -309,12 +475,32 @@
   "tempo": 1.3974,
   "loop": false,
   "min_z_m": 0.0039,
-  "min_z_frame": 13,
+  "min_z_frame": 89,
   "min_z_vertex_bone": "leg_toes.L",
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
-  "measure_seconds": 2.7,
+  "measure_seconds": 2.6,
+  "effort_layer": {
+   "max_bone_rotation_deg": 6.0,
+   "top_bones_deg": {
+    "spine_3": 6.0,
+    "neck_R_1": 4.7,
+    "neck_R_2": 4.7,
+    "neck_R_3": 4.7,
+    "neck_R_4": 4.7,
+    "neck_R_5": 4.7
+   },
+   "pelvis_z_range_m": [
+    -0.2,
+    0.016
+   ],
+   "chest_scale_range": [
+    1.0,
+    1.07
+   ],
+   "recovery_breaths": 2
+  },
   "markers": {
    "hit": {
     "frame": 42,

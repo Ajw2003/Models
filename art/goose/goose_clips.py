@@ -966,37 +966,79 @@ EFFORT_WIND = {
 
 
 def effort_pose(name, tau, t, T1, T2):
-    """The effort layer for an attack: a deeper wind-up, a strain shudder at the strike, a sag after it, and heaving breath."""
+    """The effort layer for an attack: a deeper wind-up, a strain shudder at the strike, a sag after it, and heaving breath.
+    Angles are per bone for the shudder (3 to 4 degrees on every neck bone, 2 to 3 on the wings) and for the whole
+    chain for the slump (10 degrees)."""
     h = ATTACKS[name]["hit"]
     wind = max(0.0, min(1.0, pchip(list(EFFORT_WIND[name]), tau)))
-    pose = {"pelvis": {"t": (0, 0.05 * wind, -0.16 * wind)}, "spine_3": {"rot": (-5.0 * wind, 0, 0)}}
-    pose = add_pose(pose, neck_pose(NECK_MAIN, x=-12.0 * wind))
-    pose = add_pose(pose, neck_pose(NECK_L, x=-10.0 * wind))
-    pose = add_pose(pose, neck_pose(NECK_R, x=-10.0 * wind))
-    th = h * T2 / T1  # the strike in version 2 seconds
-    win = smooth((t - (th - 0.04)) / 0.04) * (1 - smooth((t - (th + 0.16)) / 0.08))  # about 0.2 s of strain
-    osc = math.sin(2 * math.pi * 11.0 * t) * win
-    pose = add_pose(pose, neck_pose(NECK_MAIN, x=3.0 * osc, z=1.5 * osc))
-    pose = add_pose(pose, neck_pose(NECK_L, x=3.6 * osc))
-    pose = add_pose(pose, neck_pose(NECK_R, x=-3.6 * osc))
+    pose = {"pelvis": {"t": (0, 0.05 * wind, -0.18 * wind)}, "spine_3": {"rot": (-6.0 * wind, 0, 0)}}
+    pose = add_pose(pose, neck_pose(NECK_MAIN, x=-14.0 * wind))
+    pose = add_pose(pose, neck_pose(NECK_L, x=-12.0 * wind))
+    pose = add_pose(pose, neck_pose(NECK_R, x=-12.0 * wind))
+    # strain shudder: about 0.3 s at 5 Hz (3 samples a cycle even in the 15 fps MP4), per bone
+    th = h * T2 / T1
+    win = smooth((t - (th - 0.03)) / 0.05) * (1 - smooth((t - (th + 0.22)) / 0.08))
+    osc = math.sin(2 * math.pi * 5.0 * t) * win
+    for i, n in enumerate(NECK_MAIN):
+        pose = add_pose(pose, {n: {"rot": (2.5 * osc, 0, 3.0 * osc)}})
+    for i, n in enumerate(NECK_L):
+        pose = add_pose(pose, {n: {"rot": (3.5 * osc, 0, 2.5 * osc)}})
+    for i, n in enumerate(NECK_R):
+        pose = add_pose(pose, {n: {"rot": (-3.5 * osc, 0, -2.5 * osc)}})
     for sd in "LR":
         sg = side_sign(sd)
-        pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * 3.2 * osc, 0)}, f"wing_fore.{sd}": {"rot": (0, sg * -3.6 * osc, 0)}})
-    sag = max(0.0, min(1.0, pchip([(h, 0), (h + 0.15, 1.0), (T1 - 0.1, 0)], tau))) if tau > h else 0.0
-    pose = add_pose(pose, {"pelvis": {"t": (0, 0, -0.14 * sag)}, "spine_3": {"rot": (4.0 * sag, 0, 0)}})
-    pose = add_pose(pose, neck_pose(NECK_MAIN, x=6.0 * sag))
-    pose = add_pose(pose, neck_pose(NECK_L, x=6.0 * sag))
-    pose = add_pose(pose, neck_pose(NECK_R, x=6.0 * sag))
-    a, b = h + 0.25, T1 - 0.12
-    heave_env = max(0.0, min(1.0, pchip([(a, 0), (a + 0.2, 1), (b - 0.2, 1), (b, 0)], tau))) if b - 0.2 > a + 0.2 else 0.0
-    br = math.sin(2 * math.pi * 0.75 * t) * heave_env
-    pose = add_pose(pose, {"spine_2": {"scale": 1.0 + 0.055 * br}, "spine_3": {"scale": 1.0 - 0.05 * br},
-                           "pelvis": {"t": (0, 0, 0.02 * br)}})
+        pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * 3.0 * osc, 0)}, f"wing_fore.{sd}": {"rot": (0, sg * -2.5 * osc, 0)},
+                               f"wing_hand.{sd}": {"rot": (0, sg * 2.0 * osc, 0)}})
+    # sag after the strike: the pelvis drops 0.2 m and the necks slump 10 degrees
+    sag = max(0.0, min(1.0, pchip([(h, 0), (h + 0.12, 1.0), (T1 - 0.1, 0)], tau))) if tau > h else 0.0
+    pose = add_pose(pose, {"pelvis": {"t": (0, 0, -0.20 * sag)}, "spine_3": {"rot": (5.0 * sag, 0, 0)}})
+    for chain in (NECK_MAIN, NECK_L, NECK_R):
+        pose = add_pose(pose, neck_pose(chain, x=10.0 * sag))
+    # recovery heave: 1 to 3 big breaths (about one a second), chest and spine swell 7%, necks and wings rise with each
+    # breath and the heads hang lower between breaths
+    a_, b_ = h + 0.18, T1 - 0.02
+    heave_env = 0.0
+    br = 0.0
+    if b_ > a_ + 0.15:
+        u = max(0.0, min(1.0, (tau - a_) / (b_ - a_)))
+        nb = max(1, min(3, int(round((b_ - a_) * T2 / T1 / 0.9))))
+        br = 0.5 * (1 - math.cos(2 * math.pi * nb * u)) if 0 < u < 1 else 0.0
+        heave_env = smooth(u / 0.15) * (1 - smooth((u - 0.9) / 0.1))
+        EFFORT_BREATHS[name] = nb
+    pose = add_pose(pose, {"spine_1": {"scale": 1.0 + 0.05 * br}, "spine_2": {"scale": 1.0 + 0.07 * br}, "spine_3": {"scale": 1.0 - 0.065 * br},
+                           "pelvis": {"t": (0, 0, 0.03 * br)}})
+    for chain, hang, rise in ((NECK_MAIN, 8.0, -5.0), (NECK_L, 8.0, -5.0), (NECK_R, 8.0, -5.0)):
+        pose = add_pose(pose, neck_pose(chain, x=hang * heave_env * (1 - br) + rise * br))
+    for sd in "LR":
+        sg = side_sign(sd)
+        pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * (-4.0 * br + 3.0 * heave_env * (1 - br)), 0)}})
     return pose
 
 
+EFFORT_POSES = {}  # clip -> the effort layer's poses, kept to report what it adds
+EFFORT_BREATHS = {}
+
+
+def rot_stats(poses):
+    out, pz, sc = {}, [0.0], [1.0]
+    for pz_ in poses:
+        for bone, e in pz_.items():
+            if "rot" in e:
+                out[bone] = max(out.get(bone, 0.0), max(abs(x) for x in e["rot"]))
+            if bone == "pelvis" and "t" in e:
+                pz.append(e["t"][2])
+            if bone in ("spine_1", "spine_2") and "scale" in e:
+                sc.append(e["scale"])
+    top = sorted(out.items(), key=lambda kv: -kv[1])[:6]
+    return {"max_bone_rotation_deg": round(max(out.values()), 2) if out else 0.0,
+            "top_bones_deg": {k: round(v, 2) for k, v in top},
+            "pelvis_z_range_m": [round(min(pz), 3), round(max(pz), 3)],
+            "chest_scale_range": [round(min(sc), 3), round(max(sc), 3)]}
+
+
 def idle_v2_pose(t, T2):
-    """Slower, heavier breathing (twice the chest and pelvis motion), and a weight shift each way once a loop."""
+    """Slower, heavier breathing (twice the chest and pelvis motion, plus a 4.5% chest swell with the necks and wings rising
+    each breath), and a weight shift each way once a loop that moves the pelvis 0.08 m."""
     tau = t * (4.0 / T2)
     base0 = idle_pose(0.0)
     delta = add_pose(idle_pose(tau), base0, -1.0)
@@ -1009,12 +1051,18 @@ def idle_v2_pose(t, T2):
             if "scale" in e:
                 e["scale"] = 1.0 + gain * (e["scale"] - 1.0)
     pose = add_pose(base0, delta)
+    br = 0.5 * (1 - math.cos(2 * math.pi * 2 * t / T2))  # two breaths a loop, zero at both ends
+    pose = add_pose(pose, {"spine_1": {"scale": 1.0 + 0.03 * br}, "spine_2": {"scale": 1.0 + 0.045 * br}, "spine_3": {"scale": 1.0 - 0.043 * br},
+                           "wing_shoulder.L": {"rot": (0, -3.0 * br, 0)}, "wing_shoulder.R": {"rot": (0, 3.0 * br, 0)}})
+    pose = add_pose(pose, neck_pose(NECK_MAIN, x=-3.0 * br))
+    pose = add_pose(pose, neck_pose(NECK_L, x=-3.0 * br))
+    pose = add_pose(pose, neck_pose(NECK_R, x=-3.0 * br))
     f = T2 / 5.6
     sw1 = max(0.0, min(1.0, pchip([(1.2 * f, 0), (1.9 * f, 1), (2.9 * f, 1), (3.6 * f, 0)], t)))
     sw2 = max(0.0, min(1.0, pchip([(3.9 * f, 0), (4.5 * f, 1), (5.0 * f, 1), (5.4 * f, 0)], t)))
     shift = sw1 - sw2
-    pose = add_pose(pose, {"pelvis": {"t": (0.05 * shift, 0, -0.02 * abs(shift)), "rot": (0, 1.6 * shift, 0)},
-                           "spine_2": {"rot": (0, -1.2 * shift, 0)}})
+    pose = add_pose(pose, {"pelvis": {"t": (0.08 * shift, 0, -0.02 * abs(shift)), "rot": (0, 2.4 * shift, 0)},
+                           "spine_2": {"rot": (0, -1.8 * shift, 0)}})
     return pose
 
 
@@ -1027,8 +1075,11 @@ def solve_v2(rig, name):
     T1, T2 = n1 / FPS, n2 / FPS
     keys = []
     if name == "idle":
+        EFFORT_POSES[name] = []
         for f in range(n2 + 1):
-            rig.apply_pose(idle_v2_pose(f / FPS, T2), planted(rig))
+            ip = idle_v2_pose(f / FPS, T2)
+            EFFORT_POSES[name].append(add_pose(ip, idle_pose(f / FPS * ratio), -1.0))
+            rig.apply_pose(ip, planted(rig))
             keys.append((f, rig.channels()))
     elif name == "walk":
         WALK_REST_FOOT.update({s_: tuple(rig.rest_foot[s_]) for s_ in "LR"})
@@ -1036,9 +1087,10 @@ def solve_v2(rig, name):
             t = f / FPS
             tau = t * ratio
             w = 2 * math.pi * ((tau / WALK_T) % 1.0)
-            body = add_pose(walk_body(tau), {"pelvis": {"t": (0.03 * math.sin(w), 0, -0.03 - 0.02 * (1 - math.cos(2 * w))),
-                                                        "rot": (0, 2.0 * math.sin(w), 0)},
-                                             "spine_1": {"rot": (0, 0, 1.5 * math.sin(w))}})
+            extra = {"pelvis": {"t": (0.03 * math.sin(w), 0, -0.03 - 0.02 * (1 - math.cos(2 * w))), "rot": (0, 2.0 * math.sin(w), 0)},
+                     "spine_1": {"rot": (0, 0, 1.5 * math.sin(w))}}
+            EFFORT_POSES.setdefault(name, []).append(extra)
+            body = add_pose(walk_body(tau), extra)
 
             def legs(r, tau=tau):
                 out = {}
@@ -1058,7 +1110,9 @@ def solve_v2(rig, name):
             tau = t * ratio
             delta = add_pose(turn_body(tau), b0, -1.0)
             thud = max(math.exp(-(((tau - lb) / 0.06) ** 2)) for lb in lands)
-            pose = add_pose(add_pose(base0, delta), {"pelvis": {"t": (0, 0, -0.07 * thud)}})
+            thud_pose = {"pelvis": {"t": (0, 0, -0.10 * thud)}}
+            EFFORT_POSES.setdefault(name, []).append(thud_pose)
+            pose = add_pose(add_pose(base0, delta), thud_pose)
 
             def legs(r, tau=tau):
                 out = {}
@@ -1075,7 +1129,9 @@ def solve_v2(rig, name):
         def pose_fn(rig_, t, k, spec1=spec1):
             tau = t * ratio
             pose, legs = spec1["pose"](rig_, tau, k)
-            return add_pose(pose, effort_pose(name, tau, t, T1, T2)), legs
+            eff = effort_pose(name, tau, t, T1, T2)
+            EFFORT_POSES.setdefault(name, []).append(eff)
+            return add_pose(pose, eff), legs
         fit = spec1["fit"]
         spec2 = dict(T=T2, pose=pose_fn, hit=spec1["hit"] / ratio, fit=(fit[0] / ratio, fit[1] / ratio) if fit else None)
         keys = solve_attack(rig, name, spec2)
@@ -1226,6 +1282,10 @@ def measure(rig, name, act, loop, ratio=1.0):
            "loop_pose_diff_m": round(float(np.abs(pose_first - pose_last).max()), 6) if loop else None,
            "measure_seconds": round(time.time() - t0, 1)}
     rootz, rootxy, headpos = np.array(rootz), np.array(rootxy), np.array(headpos)
+    if name in EFFORT_POSES:
+        out["effort_layer"] = rot_stats(EFFORT_POSES[name])
+        if name in EFFORT_BREATHS:
+            out["effort_layer"]["recovery_breaths"] = EFFORT_BREATHS[name]
     if name in ATTACKS:
         out["markers"] = {m.name: {"frame": m.frame, "time_s": round(m.frame / FPS, 3),
                                    "normalised": round(m.frame / (f1 - f0), 4)} for m in act.pose_markers}
