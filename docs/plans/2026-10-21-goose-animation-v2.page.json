@@ -8,16 +8,16 @@
     "key": [["I build it", ""], ["Needs you first", "you"]],
     "items": [
       ["eye", "Today", "What exists today", "", "Version 1: 13 clips in art/goose/goose_animated.blend and art/goose/goose_anims.fbx, with videos and sheets in art/goose/clips/. Lengths run from 1.2 s (stagger) to 6 s (The Crown Wakes). The tongues on the heads are fixed to the jaw bone, so they cannot move on their own. The clip script (art/goose/goose_clips.py) already builds every clip from named poses, so a global slow-down and new clips extend it rather than replace it.", "Nothing from you."],
-      ["hand", "Choices", "Your six choices", "you", "How much slower; how version 1 is kept for comparison; the tongues; how long the phase transition runs; how the stun is split; how many hit variants.", "Pick an option for each question under Choices, or write your own."],
+      ["hand", "Choices", "Your six choices", "you", "How much slower the clips run; how version 1 is kept for comparison; how the tongues hang out in death; how long the phase transition runs; how the stun is split into clips; how many hit variants.", "Pick an option for each question under Choices, or write your own."],
       ["loop", "Version 2", "The new clips", "", "Every clip is rebuilt slower and heavier: longer wind-ups, a visible effort in the strike, and a laboured recovery with heaving breath. Death falls forward. The Crown Wakes becomes a longer set piece. The stagger is replaced by a knock-down stun and a set of hit reactions.", "Nothing from you."],
       ["eye", "Compare", "Side-by-side review", "", "For every clip that exists in both versions, a video with version 1 on the left and version 2 on the right, so you can judge the change directly.", "Nothing from you."],
-      ["check", "Pull request", "Same pull request", "you", "Version 2 goes onto pull request #7 beside version 1, which stays untouched.", "You watch the comparisons, then pass or fail the check."]
+      ["check", "Pull request", "Same pull request", "you", "Version 2 goes onto pull request #7 beside version 1, which stays untouched.", "You watch the side-by-side videos, then pass or fail version 2."]
     ]
   },
   "changes": [
     ["keep", "Version 1 clips", "Untouched: goose_animated.blend, goose_anims.fbx and everything in art/goose/clips/.", null, "Nothing in version 1 is rebuilt or overwritten.", null, null],
     ["new", "Version 2 files", "goose_animated_v2.blend, goose_anims_v2.fbx and art/goose/clips_v2/, with their own manifest.", null, "Built by the same goose_clips.py with a version switch, so both versions can be rebuilt from the same script.", null, null],
-    ["chg", "Death", "Falls forward instead of rolling onto its side.", ["Rolls onto its left side; the heads land at different heights", "Collapses forward onto its chest; all three necks stretch out flat in front, jaws slack, tongues out"], "The end pose stays still, and nothing goes below the floor.", null, null],
+    ["chg", "Death", "Falls forward instead of rolling onto its side.", ["Rolls onto its left side; the heads land at different heights", "Collapses forward onto its chest; all three necks stretch out flat in front, jaws slack, tongues out"], "The end pose holds still, and no part of the goose goes below the floor.", null, null],
     ["chg", "Stagger", "Replaced by a knock-down stun and separate hit reactions.", ["One 1.2 s stagger used for every hit", "A knock-down with a stun window to punish, plus several short hit reactions the game picks between at random"], "Version 1's stagger clip stays in version 1 for comparison.", null, null]
   ],
   "choices": [
@@ -25,7 +25,7 @@
       ["A", "About 1.4 times as long, with effort added", 1, "Every clip about 40% longer, plus a heavier feel: deeper wind-ups, a shudder of strain at the strike, the body sagging after it, and heaving breath in the recovery. The peck goes from 2.2 s to about 3.1 s."],
       ["B", "About 1.25 times as long, with effort added", 0, "A lighter slow-down with the same added effort."],
       ["C", "About 1.6 times as long, with effort added", 0, "The slowest; strongest sense of weight, but long attacks give the player more time."]
-    ], "Option A makes it read as old and heavy without stretching attacks so far that they stop being a threat."],
+    ], "Option A makes the goose read as old and heavy, without stretching its attacks so far that they stop being a threat."],
     ["compare", "How should version 1 be kept for comparison?", [
       ["A", "Separate version 2 files plus side-by-side videos", 1, "Version 1 stays as it is, version 2 gets its own files, and each shared clip gets a video with version 1 on the left and version 2 on the right."],
       ["B", "Separate version 2 files only", 0, "No side-by-side videos; you compare the two sets yourself."]
@@ -41,7 +41,7 @@
     ], "Option A turns a 6-second change into a moment the player stops and watches, which suits a boss's second phase."],
     ["stun", "How should the knock-down stun be built?", [
       ["A", "Three clips: fall, stunned loop, get up", 1, "stun_fall (knocked onto its chest), stun_loop (dazed on the ground, heads lolling, breath heaving; loops) and stun_get_up (a heavy, struggling rise). The game decides how long the punish window lasts by how long it plays the loop."],
-      ["B", "One clip of about 6 seconds", 0, "Fall, about 3 seconds down, then the rise, all in one clip. Simpler, but the window length is fixed in the animation."]
+      ["B", "One clip of about 6 seconds", 0, "The fall, about 3 seconds on the ground, then the rise, all in one clip. Simpler, but the window length is fixed in the animation."]
     ], "With option A the punish window can be tuned in the game without re-animating."],
     ["hits", "How many hit reaction variants?", [
       ["A", "Four", 1, "Hit from the front, hit from the left, hit from the right, and a heavy hit with a bigger recoil. Each lasts about 1 second."],
@@ -51,7 +51,7 @@
   ],
   "wrapup": {
     "summary": "Version 2 of the goose clips: slower and heavier, a forward death, a longer phase transition, a knock-down stun and separate hit reactions, with version 1 kept for comparison.",
-    "changing": "New version 2 files beside the untouched version 1; the clip script gains a version switch; the rig gains tongue bones only if you pick that.",
+    "changing": "New version 2 files beside the untouched version 1; the clip script gains a version switch; the rig gains tongue bones only if you pick option A for the tongues.",
     "blocking": "Nothing is blocked except your answers to the six choices.",
     "next": "Once you approve, I log the decisions, open issues for the version 2 work, build it on AjsAgent/import-models and add it to pull request #7 with side-by-side videos.",
     "todo": ["Pick an answer for each of the six questions under Choices.", "Tap <b>Copy my reply</b>.", "Send it with \"Design approved: goose animation v2\", or what to change."]
