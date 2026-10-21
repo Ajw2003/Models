@@ -311,6 +311,8 @@ WALK_T = 1.6
 WALK_STRIDE = 0.6
 WALK_DUTY = 0.6
 WALK_DROP = 0.12
+CLIP_LIST = (("idle", True), ("walk", True), ("turn_in_place", False), ("stagger", False), ("death", False),
+             ("hesitation_peck", False), ("flapping_charge", False), ("leap_and_dive", False), ("wing_gust", False))
 WALK_REST_FOOT = {}
 WALK_GROUND_SPEED = WALK_STRIDE / (WALK_DUTY * WALK_T)  # m/s the planted foot slides backward
 
@@ -526,6 +528,8 @@ def solve_clip(rig, name):
             pose_it(body, t)
             keys.append((f, rig.channels()))
         keys[-1] = (n, keys[-1][1])
+    elif name in ATTACKS:
+        keys = solve_attack(rig, name)
     else:
         die(f"unknown clip {name}")
     return keys
@@ -542,6 +546,11 @@ ATTACKS = {}
 
 def curve(*pts):
     return lambda t: pchip(list(pts), t)
+
+
+def envelope(*pts):
+    """Like curve, but never below zero (the smooth curve can dip under flat starts, and an envelope must not)."""
+    return lambda t: max(0.0, pchip(list(pts), t))
 
 
 def trio(pose, chain_main, chain_l, chain_r, main, side, head_main=0.0, head_side=0.0):
@@ -569,12 +578,12 @@ def step_target(rig, side, p, stride, duty, lift):
 PECK_T = 2.2
 PECK_HIT = 1.64
 peck_s = curve((0, 0), (0.9, -1.0), (1.5, -1.0), (1.585, 0.55), (1.64, 1.0), (1.76, 1.0), (2.0, 0.12), (2.2, 0))
-peck_hold = curve((0, 0), (0.9, 0), (1.0, 1), (1.4, 1), (1.5, 0), (2.2, 0))  # tremble envelope
+peck_hold = envelope((0, 0), (0.9, 0), (1.0, 1), (1.4, 1), (1.5, 0), (2.2, 0))  # tremble envelope
 
 
 def peck_pose(rig, t, k=1.0):
     s = peck_s(t)
-    side_s = peck_s(t - 0.05)
+    side_s = peck_s(t - 0.05 * (1 - smooth((t - 1.8) / 0.4)))
     pose = idle_pose(0.0)
     back, fore = (-55.0, 120.0 * k) if True else (0, 0)
     main = back * -s if s < 0 else fore * s
@@ -593,15 +602,15 @@ ATTACKS["hesitation_peck"] = dict(T=PECK_T, pose=peck_pose, hit=PECK_HIT, fit=(1
 # --- flapping_charge: crouch with wings up, a running charge in place with beating wings, a skid and recovery
 CH_T = 2.5
 CH_HIT = 1.75
-CH_RUN_T, CH_STRIDE, CH_DUTY = 0.36, 0.9, 0.5
+CH_RUN_T, CH_STRIDE, CH_DUTY = 0.36, 0.7, 0.5
 CH_GROUND_SPEED = CH_STRIDE / (CH_DUTY * CH_RUN_T)  # m/s the planted foot slides back during the run
 ch_crouch = curve((0, 0), (0.5, 1.0), (0.62, 1.0), (0.78, 0.8), (1.7, 0.8), (2.05, 0.45), (2.5, 0))
 ch_wing = curve((0, 0), (0.45, 1.0), (0.6, 1.0), (1.8, 0.6), (2.1, 0.3), (2.5, 0))
-ch_beat = curve((0, 0), (0.58, 0), (0.7, 1), (1.7, 1), (1.95, 0.2), (2.15, 0))
+ch_beat = envelope((0, 0), (0.58, 0), (0.7, 1), (1.7, 1), (1.95, 0.2), (2.15, 0))
 ch_neck = curve((0, 0), (0.5, -0.45), (0.68, 0.15), (0.85, 1.0), (1.7, 1.0), (2.0, -0.12), (2.5, 0))
 ch_lean = curve((0, 0), (0.7, 0.7), (0.9, 1.0), (1.7, 1.0), (1.95, -0.6), (2.2, -0.15), (2.5, 0))
-ch_step = curve((0, 0), (0.62, 0), (0.82, 1), (1.68, 1), (1.95, 0), (2.5, 0))
-ch_skid = curve((0, 0), (1.7, 0), (1.95, 1), (2.5, 0))
+ch_step = envelope((0, 0), (0.62, 0), (0.82, 1), (1.68, 1), (1.95, 0), (2.5, 0))
+ch_skid = envelope((0, 0), (1.7, 0), (1.95, 1), (2.5, 0))
 
 
 def charge_pose(rig, t, k=1.0):
@@ -610,14 +619,14 @@ def charge_pose(rig, t, k=1.0):
     for sd in "LR":
         sg = side_sign(sd)
         beat = math.sin(2 * math.pi * 3.5 * (t - 0.58))
-        pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * (-30.0 * w + 34.0 * e * beat), 0)},
-                               f"wing_upper.{sd}": {"rot": (0, sg * 14.0 * e * math.sin(2 * math.pi * 3.5 * (t - 0.58) - 0.5), 0)},
-                               f"wing_fore.{sd}": {"rot": (0, sg * (-8.0 * w + 18.0 * e * math.sin(2 * math.pi * 3.5 * (t - 0.58) - 1.0)), 0)},
-                               f"wing_hand.{sd}": {"rot": (0, sg * 22.0 * e * math.sin(2 * math.pi * 3.5 * (t - 0.58) - 1.6), 0)}})
+        pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * (-40.0 * w + 30.0 * e * beat * k), 0)},
+                               f"wing_upper.{sd}": {"rot": (0, sg * 8.0 * e * k * math.sin(2 * math.pi * 3.5 * (t - 0.58) - 0.5), 0)},
+                               f"wing_fore.{sd}": {"rot": (0, sg * (-10.0 * w + 10.0 * e * k * math.sin(2 * math.pi * 3.5 * (t - 0.58) - 1.0)), 0)},
+                               f"wing_hand.{sd}": {"rot": (0, sg * 14.0 * e * k * math.sin(2 * math.pi * 3.5 * (t - 0.58) - 1.6), 0)}})
     pose = trio(pose, None, None, None, 58.0 * n if n > 0 else 45.0 * n, 64.0 * n if n > 0 else 30.0 * n,
                 head_main=-22.0 * max(n, 0), head_side=-24.0 * max(n, 0))
-    pose = add_pose(pose, {"pelvis": {"t": (0, 0.45 * max(-lean, 0) + 0.08 * math.sin(2 * math.pi * t / CH_RUN_T * 2) * ch_step(t), -0.42 * c)},
-                           "root": {"rot": (13.0 * lean, 0, 0)}})
+    pose = add_pose(pose, {"pelvis": {"t": (0, 0.45 * max(-lean, 0) + 0.08 * math.sin(2 * math.pi * t / CH_RUN_T * 2) * ch_step(t), -0.30 * c)},
+                           "root": {"rot": (10.0 * lean, 0, 0)}})
 
     def legs(r):
         out = {}
@@ -633,7 +642,7 @@ def charge_pose(rig, t, k=1.0):
     return pose, legs
 
 
-ATTACKS["flapping_charge"] = dict(T=CH_T, pose=charge_pose, hit=CH_HIT, fit=None)
+ATTACKS["flapping_charge"] = dict(T=CH_T, pose=charge_pose, hit=CH_HIT, fit=(0.5, 2.2))
 
 # --- leap_and_dive: deep crouch, a 3 m jump, wings spread at the apex, necks down, a slam landing, rise to idle
 LP_T = 3.0
@@ -643,7 +652,7 @@ lp_crouch = curve((0, 0), (0.6, 1.0), (0.78, 1.0), (0.88, -0.15), (1.0, 0), (3.0
 lp_wing = curve((0, 0), (0.6, -0.4), (0.85, 0.5), (1.325, 1.0), (1.7, 0.55), (1.9, 0.15), (2.15, -0.1), (3.0, 0))
 lp_neck = curve((0, 0), (0.6, -0.5), (0.85, -0.3), (1.25, 0.1), (1.6, 0.85), (1.84, 1.0), (1.98, 1.0), (2.45, 0.2), (3.0, 0))
 lp_pitch = curve((0, 0), (1.2, 0), (1.84, 1.0), (2.0, 0.8), (2.5, 0.1), (3.0, 0))
-lp_slam = curve((0, 0), (1.8, 0), (1.92, 1.0), (2.3, 0.55), (3.0, 0))
+lp_slam = envelope((0, 0), (1.8, 0), (1.92, 1.0), (2.3, 0.55), (3.0, 0))
 
 
 def leap_height(t):
@@ -665,7 +674,7 @@ def leap_pose(rig, t, k=1.0):
     nm = 125.0 * n * k if n > 0 else 45.0 * n
     ns = 105.0 * n * k if n > 0 else 30.0 * n
     pose = trio(pose, None, None, None, nm, ns, head_main=24.0 * max(n, 0) * k, head_side=20.0 * max(n, 0) * k)
-    pose = add_pose(pose, {"pelvis": {"t": (0, 0, -0.92 * cr - 0.55 * slam + 0.12 * max(-cr, 0))},
+    pose = add_pose(pose, {"pelvis": {"t": (0, 0, -0.70 * cr - 0.45 * slam + 0.12 * max(-cr, 0))},
                            "root": {"t": (0, 0, h), "rot": (26.0 * pit * k, 0, 0)}})
 
     def legs(r):
@@ -687,7 +696,7 @@ WG_T = 2.0
 WG_HIT = 1.0
 wg_g = curve((0, 0), (0.75, -1.0), (0.88, -1.0), (0.96, 0.8), (1.02, 1.0), (1.25, 0.55), (1.6, 0.1), (2.0, 0))
 wg_lean = curve((0, 0), (0.8, -0.25), (1.0, 1.0), (1.3, 0.75), (1.7, 0.2), (2.0, 0))
-wg_spread = curve((0, 0), (0.9, 0), (1.0, 1.0), (1.3, 0.6), (1.7, 0), (2.0, 0))
+wg_spread = envelope((0, 0), (0.9, 0), (1.0, 1.0), (1.3, 0.6), (1.7, 0), (2.0, 0))
 
 
 def gust_pose(rig, t, k=1.0):
@@ -718,6 +727,7 @@ def solve_attack(rig, name):
     spec = ATTACKS[name]
     n = int(round(spec["T"] * FPS))
     keys = []
+    lifted = []
     for f in range(n + 1):
         t = f / FPS
         k = 1.0
@@ -736,7 +746,14 @@ def solve_attack(rig, name):
                     hi = mid
             pose, legs = spec["pose"](rig, t, lo)
             rig.apply_pose(pose, legs)
+        z = rig.min_z()
+        if z < 0.002:  # a few centimetres of foot or crouch error: lift the whole body so nothing is below the floor
+            pose = add_pose(pose, {"root": {"t": (0, 0, 0.002 - z)}})
+            rig.apply_pose(pose, legs)
+            lifted.append(round(0.002 - z, 3))
         keys.append((f, rig.channels()))
+    if lifted:
+        print(f"goose_clips: {name}: lifted the body on {len(lifted)} frames, by up to {max(lifted):.3f} m, to stay off the floor")
     return keys
 
 
@@ -762,6 +779,9 @@ def write_action(rig, name, keys, loop):
             pb.keyframe_insert("rotation_quaternion", frame=f)
             pb.keyframe_insert("scale", frame=f)
     act["loop"] = loop
+    if name in ATTACKS:  # the hit event, as a timeline marker on the action
+        mk = act.pose_markers.new("hit")
+        mk.frame = int(round(ATTACKS[name]["hit"] * FPS))
     act.frame_start, act.frame_end = 0, keys[-1][0]
     act.use_frame_range = True
     rig.arm.animation_data.action = None
@@ -772,7 +792,30 @@ def foot_names():
     return [f"leg_toes.{s}" for s in "LR"]
 
 
+def snapshot(rig, act, frame):
+    rig.arm.animation_data.action = act
+    bpy.context.scene.frame_set(frame)
+    ev_arm = rig.arm.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    return np.array([list(ev_arm.pose.bones[n].head) + list(ev_arm.pose.bones[n].tail) for n in rig.names])
+
+
+def slide_stats(rig, foot, frames, ground_speed):
+    """Planted-foot slide speed over a window of frames against the implied ground speed."""
+    dt = 1.0 / FPS
+    rec = {}
+    for s in "LR":
+        fp = np.array(foot[s])
+        planted_f = fp[:, 2] < rig.rest_foot[s].z + 0.01
+        sp = [(fp[i + 1, 1] - fp[i, 1]) / dt for i in frames if planted_f[i] and planted_f[i + 1]]
+        sp = np.array(sp)
+        rec[s] = {"planted_frames_in_window": int(len(sp)), "slide_speed_mean_mps": round(float(sp.mean()), 4),
+                  "slide_speed_min_mps": round(float(sp.min()), 4), "slide_speed_max_mps": round(float(sp.max()), 4),
+                  "max_abs_dev_from_ground_speed_mps": round(float(np.abs(sp - ground_speed).max()), 4)}
+    return rec
+
+
 def measure(rig, name, act, loop):
+    idle0 = snapshot(rig, bpy.data.actions["idle"], 0)
     rig.arm.animation_data.action = act
     rig.mod.show_viewport = True
     sc = bpy.context.scene
@@ -780,6 +823,7 @@ def measure(rig, name, act, loop):
     dg = None
     minz, minz_at = 1e9, None
     foot = {s: [] for s in "LR"}
+    rootz, rootxy = [], []
     pose_first = pose_last = None
     t0 = time.time()
     for f in range(f0, f1 + 1):
@@ -798,6 +842,9 @@ def measure(rig, name, act, loop):
         ev_arm = rig.arm.evaluated_get(dg)
         for s in "LR":
             foot[s].append(tuple(ev_arm.pose.bones[f"leg_toes.{s}"].head))
+        rh = ev_arm.pose.bones["root"].head
+        rootz.append(rh[2])
+        rootxy.append((rh[0], rh[1]))
         snap = np.array([list(ev_arm.pose.bones[n].head) + list(ev_arm.pose.bones[n].tail) for n in rig.names])
         if f == f0:
             pose_first = snap
@@ -806,6 +853,22 @@ def measure(rig, name, act, loop):
            "min_z_frame": minz_at, "min_z_vertex_bone": low_group, "min_z_ok": minz >= -FLOOR_TOL, "min_z_checked": "every frame, full mesh",
            "loop_pose_diff_m": round(float(np.abs(pose_first - pose_last).max()), 6) if loop else None,
            "measure_seconds": round(time.time() - t0, 1)}
+    rootz, rootxy = np.array(rootz), np.array(rootxy)
+    if name in ATTACKS:
+        hit = [m.frame for m in act.pose_markers if m.name == "hit"]
+        out["hit_marker_frame"] = hit[0] if hit else None
+        out["hit_time_s"] = round(hit[0] / FPS, 3) if hit else None
+        out["hit_normalised"] = round(hit[0] / (f1 - f0), 4) if hit else None
+        out["first_frame_vs_idle0_pose_diff_m"] = round(float(np.abs(pose_first - idle0).max()), 6)
+        out["last_frame_vs_idle0_pose_diff_m"] = round(float(np.abs(pose_last - idle0).max()), 6)
+        out["root_peak_z_m"] = round(float(rootz.max()), 3)
+        out["root_max_xy_m"] = round(float(np.abs(rootxy).max()), 4)
+        if name == "flapping_charge":
+            run = range(int(0.95 * FPS), int(1.65 * FPS))
+            out["implied_ground_speed_mps"] = round(CH_GROUND_SPEED, 3)
+            out["stride_m"], out["stance_fraction"], out["step_cycle_s"] = CH_STRIDE, CH_DUTY, CH_RUN_T
+            out["run_window_s"] = [run.start / FPS, run.stop / FPS]
+            out["feet"] = slide_stats(rig, foot, run, CH_GROUND_SPEED)
     if name == "walk":
         dt = 1.0 / FPS
         rec = {}
@@ -839,7 +902,7 @@ def build():
     bpy.context.scene.render.fps = FPS
     metrics = {}
     acts = {}
-    for name, loop in (("idle", True), ("walk", True), ("turn_in_place", False), ("stagger", False), ("death", False)):
+    for name, loop in CLIP_LIST:
         t1 = time.time()
         rig.reach_err = 0.0
         keys = solve_clip(rig, name)
@@ -848,7 +911,7 @@ def build():
               f"{rig.reach_err:.3f} m, solved in {time.time() - t1:.1f} s")
         rig.reach_err = 0.0
     bpy.context.scene.frame_start, bpy.context.scene.frame_end = 0, 120
-    for name, loop in (("idle", True), ("walk", True), ("turn_in_place", False), ("stagger", False), ("death", False)):
+    for name, loop in CLIP_LIST:
         metrics[name] = measure(rig, name, acts[name], loop)
         print(f"goose_clips: {name}: {json.dumps(metrics[name])}")
     rig.reset()
@@ -869,7 +932,7 @@ def build():
 BG = "#EDE6D6"
 
 
-CAM_TARGET = {"death": (2.0, 0.3, 2.2)}  # the goose falls toward +X
+CAM_TARGET = {"death": (2.0, 0.3, 2.2), "leap_and_dive": (0, -0.5, 4.0), "hesitation_peck": (0, -1.0, 2.8)}  # the goose falls toward +X
 
 
 def setup_scene(res, samples, target=(0, 0.3, 3.0)):
