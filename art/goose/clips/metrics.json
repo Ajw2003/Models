@@ -9,7 +9,7 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": 0.0,
-  "measure_seconds": 2.5
+  "measure_seconds": 2.7
  },
  "walk": {
   "frames": 48,
@@ -21,7 +21,7 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": 0.0,
-  "measure_seconds": 1.0,
+  "measure_seconds": 1.1,
   "implied_ground_speed_mps": 0.625,
   "stride_m": 0.6,
   "stance_fraction": 0.6,
@@ -94,10 +94,22 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
-  "measure_seconds": 1.4,
+  "measure_seconds": 1.3,
+  "markers": {
+   "hit": {
+    "frame": 49,
+    "time_s": 1.633,
+    "normalised": 0.7424
+   }
+  },
   "hit_marker_frame": 49,
   "hit_time_s": 1.633,
   "hit_normalised": 0.7424,
+  "crown_scales_last_frame": {
+   "crown_main": 1.0,
+   "crown_L": 1.013,
+   "crown_R": 1.014
+  },
   "first_frame_vs_idle0_pose_diff_m": 0.0,
   "last_frame_vs_idle0_pose_diff_m": 0.0,
   "root_peak_z_m": 0.0,
@@ -113,10 +125,22 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
-  "measure_seconds": 1.7,
+  "measure_seconds": 1.5,
+  "markers": {
+   "hit": {
+    "frame": 52,
+    "time_s": 1.733,
+    "normalised": 0.6933
+   }
+  },
   "hit_marker_frame": 52,
   "hit_time_s": 1.733,
   "hit_normalised": 0.6933,
+  "crown_scales_last_frame": {
+   "crown_main": 1.0,
+   "crown_L": 1.013,
+   "crown_R": 1.014
+  },
   "first_frame_vs_idle0_pose_diff_m": 0.0,
   "last_frame_vs_idle0_pose_diff_m": 0.0,
   "root_peak_z_m": 0.0,
@@ -157,9 +181,21 @@
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
   "measure_seconds": 1.8,
+  "markers": {
+   "hit": {
+    "frame": 57,
+    "time_s": 1.9,
+    "normalised": 0.6333
+   }
+  },
   "hit_marker_frame": 57,
   "hit_time_s": 1.9,
   "hit_normalised": 0.6333,
+  "crown_scales_last_frame": {
+   "crown_main": 1.0,
+   "crown_L": 1.013,
+   "crown_R": 1.014
+  },
   "first_frame_vs_idle0_pose_diff_m": 0.0,
   "last_frame_vs_idle0_pose_diff_m": 0.0,
   "root_peak_z_m": 2.999,
@@ -175,13 +211,159 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
-  "measure_seconds": 1.2,
+  "measure_seconds": 1.3,
+  "markers": {
+   "hit": {
+    "frame": 30,
+    "time_s": 1.0,
+    "normalised": 0.5
+   }
+  },
   "hit_marker_frame": 30,
   "hit_time_s": 1.0,
   "hit_normalised": 0.5,
+  "crown_scales_last_frame": {
+   "crown_main": 1.0,
+   "crown_L": 1.013,
+   "crown_R": 1.014
+  },
   "first_frame_vs_idle0_pose_diff_m": 0.0,
   "last_frame_vs_idle0_pose_diff_m": 0.0,
   "root_peak_z_m": 0.0,
+  "root_max_xy_m": 0.0
+ },
+ "turning_tail_sweep": {
+  "frames": 72,
+  "seconds": 2.4,
+  "loop": false,
+  "min_z_m": 0.0039,
+  "min_z_frame": 53,
+  "min_z_vertex_bone": "leg_toes.R",
+  "min_z_ok": true,
+  "min_z_checked": "every frame, full mesh",
+  "loop_pose_diff_m": null,
+  "measure_seconds": 1.5,
+  "markers": {
+   "hit": {
+    "frame": 30,
+    "time_s": 1.0,
+    "normalised": 0.4167
+   }
+  },
+  "hit_marker_frame": 30,
+  "hit_time_s": 1.0,
+  "hit_normalised": 0.4167,
+  "crown_scales_last_frame": {
+   "crown_main": 1.0,
+   "crown_L": 1.013,
+   "crown_R": 1.014
+  },
+  "first_frame_vs_idle0_pose_diff_m": 0.0,
+  "last_frame_vs_idle0_pose_diff_m": 1e-06,
+  "root_peak_z_m": 0.0,
+  "root_max_xy_m": 0.0
+ },
+ "neck_lunge_grab": {
+  "frames": 96,
+  "seconds": 3.2,
+  "loop": false,
+  "min_z_m": 0.0028,
+  "min_z_frame": 56,
+  "min_z_vertex_bone": "crown_main",
+  "min_z_ok": true,
+  "min_z_checked": "every frame, full mesh",
+  "loop_pose_diff_m": null,
+  "measure_seconds": 1.9,
+  "markers": {
+   "hit": {
+    "frame": 36,
+    "time_s": 1.2,
+    "normalised": 0.375
+   },
+   "release": {
+    "frame": 71,
+    "time_s": 2.367,
+    "normalised": 0.7396
+   }
+  },
+  "hit_marker_frame": 36,
+  "hit_time_s": 1.2,
+  "hit_normalised": 0.375,
+  "crown_scales_last_frame": {
+   "crown_main": 1.0,
+   "crown_L": 1.013,
+   "crown_R": 1.014
+  },
+  "head_main_at_hit_m": {
+   "forward_from_root": 4.29,
+   "height": 1.59
+  },
+  "head_main_max_forward_m": 4.29,
+  "first_frame_vs_idle0_pose_diff_m": 0.0,
+  "last_frame_vs_idle0_pose_diff_m": 0.0,
+  "root_peak_z_m": 0.0,
+  "root_max_xy_m": 0.0
+ },
+ "death_honk": {
+  "frames": 78,
+  "seconds": 2.6,
+  "loop": false,
+  "min_z_m": 0.0039,
+  "min_z_frame": 7,
+  "min_z_vertex_bone": "leg_toes.L",
+  "min_z_ok": true,
+  "min_z_checked": "every frame, full mesh",
+  "loop_pose_diff_m": null,
+  "measure_seconds": 1.6,
+  "markers": {
+   "hit": {
+    "frame": 30,
+    "time_s": 1.0,
+    "normalised": 0.3846
+   }
+  },
+  "hit_marker_frame": 30,
+  "hit_time_s": 1.0,
+  "hit_normalised": 0.3846,
+  "crown_scales_last_frame": {
+   "crown_main": 1.0,
+   "crown_L": 1.013,
+   "crown_R": 1.014
+  },
+  "first_frame_vs_idle0_pose_diff_m": 0.0,
+  "last_frame_vs_idle0_pose_diff_m": 0.0,
+  "root_peak_z_m": 0.0,
+  "root_max_xy_m": 0.0
+ },
+ "crown_wakes": {
+  "frames": 180,
+  "seconds": 6.0,
+  "loop": false,
+  "min_z_m": 0.002,
+  "min_z_frame": 60,
+  "min_z_vertex_bone": "spine_3",
+  "min_z_ok": true,
+  "min_z_checked": "every frame, full mesh",
+  "loop_pose_diff_m": null,
+  "measure_seconds": 3.9,
+  "markers": {
+   "roar": {
+    "frame": 132,
+    "time_s": 4.4,
+    "normalised": 0.7333
+   }
+  },
+  "hit_marker_frame": null,
+  "hit_time_s": null,
+  "hit_normalised": null,
+  "crown_scales_last_frame": {
+   "crown_main": 1.5,
+   "crown_L": 1.513,
+   "crown_R": 1.514
+  },
+  "first_frame_vs_idle0_pose_diff_m": 0.0,
+  "last_frame_vs_idle0_pose_diff_m": 1.327744,
+  "root_peak_z_m": 0.029,
   "root_max_xy_m": 0.0
  }
 }

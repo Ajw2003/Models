@@ -760,7 +760,10 @@ ts_yaw = curve((0, 0), (0.35, -28), (0.5, -28), (0.9, 120), (1.15, 245), (1.5, 3
 
 
 def ts_omega(t):
-    return (ts_yaw(t + 0.01) - ts_yaw(t - 0.01)) / 0.02  # degrees per second
+    """Spin rate in degrees per second, forced to exactly zero at the first and last frame (the curve's own tangent
+    is flat there, but a finite difference of it is not, and that leaked into the tail at frame 0)."""
+    w = min(smooth(t / 0.1), smooth((TS_T - t) / 0.1))
+    return w * (ts_yaw(t + 0.01) - ts_yaw(t - 0.01)) / 0.02
 
 
 TS_HIT = max((f / FPS for f in range(int(TS_T * FPS) + 1)), key=lambda t: abs(ts_omega(t)))
@@ -901,7 +904,7 @@ def crown_pose(rig, t, k=1.0):
                                f"wing_fore.{sd}": {"rot": (0, sg * -14.0 * u, 0)},
                                f"wing_hand.{sd}": {"rot": (0, sg * -10.0 * u, 0)}})
     shud = ro * math.sin(2 * math.pi * 11.0 * t)
-    pose = add_pose(pose, {"pelvis": {"t": (0, 0, -0.80 * kn + 0.02 * shud)}, "root": {"rot": (4.0 * kn, 0, 0)}})
+    pose = add_pose(pose, {"pelvis": {"t": (0, 0, -0.72 * kn + 0.02 * shud)}, "root": {"rot": (4.0 * kn, 0, 0)}})
 
     def legs(r):
         out = {}
