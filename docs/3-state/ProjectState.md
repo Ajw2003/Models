@@ -1,12 +1,12 @@
 # Project state
 
-**Headline: 55%.** The goose is rigged and 5 of its 13 clips are built; the 8 attack and transition clips are not.
+**Headline: 70%.** The goose is rigged and 9 of its 13 clips are built; group two of the attacks and the phase transition are not.
 
 | Milestone | Status |
 |---|---|
 | 1. Models moved in | Done: files compared byte for byte with `cd0cef5`; `main` at `7ac237e` |
 | 2. Goose boss rig | Built, pose-tested and looked at (#2): 59 bones, `docs/art/reviews/goose-rig-review.png`; waits on aj's check in the pull request |
-| 3. Goose boss clips | 5 of 13 built (#3): idle, walk, turn_in_place, stagger, death, with `art/goose/clips/metrics.json` and contact sheets; attack group one (#4) next |
+| 3. Goose boss clips | 9 of 13 built (#3, #4): the five supporting clips plus Hesitation Peck, Flapping Charge, Leap and Dive, Wing Gust; known defect: Flapping Charge's planted feet slide 14 to 16% faster than its implied 3.889 m/s ground speed (`art/goose/clips/metrics.json`); group two and The Crown Wakes (#5) next |
 | 4. Scythe finished | Unknown: no acceptance yet |
 
 ## The one thing that is not what it looks like
