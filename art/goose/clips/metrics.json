@@ -9,7 +9,7 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": 0.0,
-  "measure_seconds": 2.7
+  "measure_seconds": 2.6
  },
  "walk": {
   "frames": 48,
@@ -21,7 +21,7 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": 0.0,
-  "measure_seconds": 1.1,
+  "measure_seconds": 1.0,
   "implied_ground_speed_mps": 0.625,
   "stride_m": 0.6,
   "stance_fraction": 0.6,
@@ -82,7 +82,7 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
-  "measure_seconds": 2.5
+  "measure_seconds": 2.6
  },
  "hesitation_peck": {
   "frames": 66,
@@ -94,7 +94,7 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
-  "measure_seconds": 1.3,
+  "measure_seconds": 1.4,
   "markers": {
    "hit": {
     "frame": 49,
@@ -125,7 +125,7 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
-  "measure_seconds": 1.5,
+  "measure_seconds": 1.7,
   "markers": {
    "hit": {
     "frame": 52,
@@ -180,7 +180,7 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
-  "measure_seconds": 1.8,
+  "measure_seconds": 1.9,
   "markers": {
    "hit": {
     "frame": 57,
@@ -211,7 +211,7 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
-  "measure_seconds": 1.3,
+  "measure_seconds": 1.2,
   "markers": {
    "hit": {
     "frame": 30,
@@ -273,7 +273,7 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
-  "measure_seconds": 1.9,
+  "measure_seconds": 2.0,
   "markers": {
    "hit": {
     "frame": 36,
@@ -345,7 +345,7 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
-  "measure_seconds": 3.9,
+  "measure_seconds": 3.8,
   "markers": {
    "roar": {
     "frame": 132,

@@ -777,7 +777,7 @@ def spin_pose(rig, t, k=1.0):
     yaw, om, fl = ts_yaw(t), ts_omega(t) / 500.0, ts_flare(t)
     pose = add_pose(pose, {"root": {"rot": (0, 0, yaw)}, "pelvis": {"rot": (0, 0, -9 * om), "t": (0, 0, -0.10 * fl)},
                            "spine_3": {"rot": (0, 0, 10 * om)},
-                           "tail_1": {"rot": (0, 0, -32 * om)}, "tail_2": {"rot": (0, 0, -26 * om)}})
+                           "tail_1": {"rot": (0, 0, -52 * om)}, "tail_2": {"rot": (0, 0, -40 * om)}})
     pose = add_pose(pose, neck_pose(NECK_MAIN, z=22 * om))
     pose = add_pose(pose, neck_pose(NECK_L, z=26 * om))
     pose = add_pose(pose, neck_pose(NECK_R, z=26 * om))
@@ -931,12 +931,15 @@ def solve_attack(rig, name):
         pose, legs = spec["pose"](rig, t, 1.0)
         rig.apply_pose(pose, legs)
         if window and window[0] <= t <= window[1] and rig.min_z() < 0.002:
+            pose0, legs0 = spec["pose"](rig, t, 0.0)
+            rig.apply_pose(pose0, legs0)
+            floor = min(0.002, rig.min_z() - 1e-4)  # what the pose without the strike already touches
             lo, hi = 0.0, 1.0
             for _ in range(8):
                 mid = (lo + hi) / 2
                 pose, legs = spec["pose"](rig, t, mid)
                 rig.apply_pose(pose, legs)
-                if rig.min_z() >= 0.002:
+                if rig.min_z() >= floor:
                     lo = mid
                 else:
                     hi = mid
