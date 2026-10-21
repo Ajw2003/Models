@@ -141,6 +141,11 @@ class Rig:
             cur3 = pb.matrix.to_3x3().normalized()
             delta = (e["orient"] @ rest3) @ cur3.inverted()
             M = Matrix.Translation(head) @ delta.to_4x4() @ Matrix.Translation(-head)
+        if "brot" in e:  # rotation about the BODY's axes (the pelvis frame), e.g. to fold a wing on a body lying on its side
+            rx, ry, rz = (math.radians(a) for a in e["brot"])
+            R = Matrix.Rotation(rz, 3, "Z") @ Matrix.Rotation(ry, 3, "Y") @ Matrix.Rotation(rx, 3, "X")
+            B = self.body_matrix().to_3x3().normalized()
+            M = Matrix.Translation(head) @ (B @ R @ B.inverted()).to_4x4() @ Matrix.Translation(-head) @ M
         if "rot" in e:
             rx, ry, rz = (math.radians(a) for a in e["rot"])
             R = Matrix.Rotation(rz, 4, "Z") @ Matrix.Rotation(ry, 4, "Y") @ Matrix.Rotation(rx, 4, "X")

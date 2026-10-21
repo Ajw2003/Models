@@ -9,7 +9,7 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": 0.0,
-  "measure_seconds": 2.4
+  "measure_seconds": 2.6
  },
  "walk": {
   "frames": 48,
@@ -21,7 +21,7 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": 0.0,
-  "measure_seconds": 1.0,
+  "measure_seconds": 1.1,
   "implied_ground_speed_mps": 0.625,
   "stride_m": 0.6,
   "stance_fraction": 0.6,
@@ -58,7 +58,7 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
-  "measure_seconds": 1.0
+  "measure_seconds": 0.9
  },
  "stagger": {
   "frames": 36,
@@ -82,6 +82,6 @@
   "min_z_ok": true,
   "min_z_checked": "every frame, full mesh",
   "loop_pose_diff_m": null,
-  "measure_seconds": 2.7
+  "measure_seconds": 2.4
  }
 }
