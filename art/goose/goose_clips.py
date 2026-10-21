@@ -531,6 +531,215 @@ def solve_clip(rig, name):
     return keys
 
 
+# ---------------------------------------------------------------- attack group one
+# Every attack is idle frame 0 plus weighted offsets that are all zero at the first and last frame, with feet
+# planted by IK (or stepping / airborne where the attack says so). pose_fn(rig, t, k) -> (pose, legs callback);
+# k in [0, 1] scales the part of the pose that can hit the floor (the strike), so it can be backed off until
+# nothing is below the floor (the heads then rest on the ground instead of sinking into it).
+
+ATTACKS = {}
+
+
+def curve(*pts):
+    return lambda t: pchip(list(pts), t)
+
+
+def trio(pose, chain_main, chain_l, chain_r, main, side, head_main=0.0, head_side=0.0):
+    """Add a bend (degrees about X, positive is forward and down) to all three necks and heads."""
+    pose = add_pose(pose, neck_pose(NECK_MAIN, x=main))
+    pose = add_pose(pose, neck_pose(NECK_L, x=side))
+    pose = add_pose(pose, neck_pose(NECK_R, x=side))
+    pose = add_pose(pose, {"head_main": {"rot": (head_main, 0, 0)}, "head_L": {"rot": (head_side, 0, 0)},
+                           "head_R": {"rot": (head_side, 0, 0)}})
+    return pose
+
+
+def step_target(rig, side, p, stride, duty, lift):
+    f0 = rig.rest_foot[side]
+    half = stride / 2
+    if p < duty:
+        u, up, toe = half - stride * (p / duty), 0.0, 7.0
+    else:
+        q = (p - duty) / (1 - duty)
+        u, up, toe = -half + stride * smooth(q), lift * math.sin(math.pi * q) ** 1.2, 7.0 - 20.0 * math.sin(math.pi * q)
+    return Vector((f0.x, f0.y - u, f0.z + up)), toe
+
+
+# --- hesitation_peck: rear back slowly, hold and tremble, then a very fast peck to the ground 3 m ahead
+PECK_T = 2.2
+PECK_HIT = 1.64
+peck_s = curve((0, 0), (0.9, -1.0), (1.5, -1.0), (1.585, 0.55), (1.64, 1.0), (1.76, 1.0), (2.0, 0.12), (2.2, 0))
+peck_hold = curve((0, 0), (0.9, 0), (1.0, 1), (1.4, 1), (1.5, 0), (2.2, 0))  # tremble envelope
+
+
+def peck_pose(rig, t, k=1.0):
+    s = peck_s(t)
+    side_s = peck_s(t - 0.05)
+    pose = idle_pose(0.0)
+    back, fore = (-55.0, 120.0 * k) if True else (0, 0)
+    main = back * -s if s < 0 else fore * s
+    sd_s = side_s
+    side = (-22.0 * -sd_s) if sd_s < 0 else (50.0 * sd_s * k)
+    tremble = 2.4 * peck_hold(t) * math.sin(2 * math.pi * 9.0 * t)
+    pose = trio(pose, None, None, None, main + tremble * 1.0, side + tremble * 0.6,
+                head_main=(-12.0 * -s if s < 0 else 28.0 * s * k), head_side=(10.0 * sd_s))
+    drop = max(0.0, s) * 0.28 * k + max(0.0, -s) * -0.05
+    pose = add_pose(pose, {"pelvis": {"t": (0, 0.12 * max(0.0, -s), -drop)}, "root": {"rot": (9.0 * max(0.0, s) * k, 0, 0)}})
+    return pose, planted(rig)
+
+
+ATTACKS["hesitation_peck"] = dict(T=PECK_T, pose=peck_pose, hit=PECK_HIT, fit=(1.55, 1.95))
+
+# --- flapping_charge: crouch with wings up, a running charge in place with beating wings, a skid and recovery
+CH_T = 2.5
+CH_HIT = 1.75
+CH_RUN_T, CH_STRIDE, CH_DUTY = 0.36, 0.9, 0.5
+CH_GROUND_SPEED = CH_STRIDE / (CH_DUTY * CH_RUN_T)  # m/s the planted foot slides back during the run
+ch_crouch = curve((0, 0), (0.5, 1.0), (0.62, 1.0), (0.78, 0.8), (1.7, 0.8), (2.05, 0.45), (2.5, 0))
+ch_wing = curve((0, 0), (0.45, 1.0), (0.6, 1.0), (1.8, 0.6), (2.1, 0.3), (2.5, 0))
+ch_beat = curve((0, 0), (0.58, 0), (0.7, 1), (1.7, 1), (1.95, 0.2), (2.15, 0))
+ch_neck = curve((0, 0), (0.5, -0.45), (0.68, 0.15), (0.85, 1.0), (1.7, 1.0), (2.0, -0.12), (2.5, 0))
+ch_lean = curve((0, 0), (0.7, 0.7), (0.9, 1.0), (1.7, 1.0), (1.95, -0.6), (2.2, -0.15), (2.5, 0))
+ch_step = curve((0, 0), (0.62, 0), (0.82, 1), (1.68, 1), (1.95, 0), (2.5, 0))
+ch_skid = curve((0, 0), (1.7, 0), (1.95, 1), (2.5, 0))
+
+
+def charge_pose(rig, t, k=1.0):
+    pose = idle_pose(0.0)
+    c, w, e, n, lean = ch_crouch(t), ch_wing(t), ch_beat(t), ch_neck(t), ch_lean(t)
+    for sd in "LR":
+        sg = side_sign(sd)
+        beat = math.sin(2 * math.pi * 3.5 * (t - 0.58))
+        pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * (-30.0 * w + 34.0 * e * beat), 0)},
+                               f"wing_upper.{sd}": {"rot": (0, sg * 14.0 * e * math.sin(2 * math.pi * 3.5 * (t - 0.58) - 0.5), 0)},
+                               f"wing_fore.{sd}": {"rot": (0, sg * (-8.0 * w + 18.0 * e * math.sin(2 * math.pi * 3.5 * (t - 0.58) - 1.0)), 0)},
+                               f"wing_hand.{sd}": {"rot": (0, sg * 22.0 * e * math.sin(2 * math.pi * 3.5 * (t - 0.58) - 1.6), 0)}})
+    pose = trio(pose, None, None, None, 58.0 * n if n > 0 else 45.0 * n, 64.0 * n if n > 0 else 30.0 * n,
+                head_main=-22.0 * max(n, 0), head_side=-24.0 * max(n, 0))
+    pose = add_pose(pose, {"pelvis": {"t": (0, 0.45 * max(-lean, 0) + 0.08 * math.sin(2 * math.pi * t / CH_RUN_T * 2) * ch_step(t), -0.42 * c)},
+                           "root": {"rot": (13.0 * lean, 0, 0)}})
+
+    def legs(r):
+        out = {}
+        st, sk = ch_step(t), ch_skid(t)
+        for sd in "LR":
+            p = ((t / CH_RUN_T) + (0.0 if sd == "L" else 0.5)) % 1.0
+            tgt, toe = step_target(r, sd, p, CH_STRIDE, CH_DUTY, 0.28)
+            rest = r.rest_foot[sd]
+            tgt = rest + (tgt - rest) * st
+            tgt.y -= 0.35 * sk
+            out.update(r.leg_aims(sd, tgt, FWD, toe_deg=7.0 + (toe - 7.0) * st))
+        return out
+    return pose, legs
+
+
+ATTACKS["flapping_charge"] = dict(T=CH_T, pose=charge_pose, hit=CH_HIT, fit=None)
+
+# --- leap_and_dive: deep crouch, a 3 m jump, wings spread at the apex, necks down, a slam landing, rise to idle
+LP_T = 3.0
+LP_HIT = 1.9
+LP_T0, LP_T1, LP_PEAK = 0.8, 1.85, 3.0
+lp_crouch = curve((0, 0), (0.6, 1.0), (0.78, 1.0), (0.88, -0.15), (1.0, 0), (3.0, 0))
+lp_wing = curve((0, 0), (0.6, -0.4), (0.85, 0.5), (1.325, 1.0), (1.7, 0.55), (1.9, 0.15), (2.15, -0.1), (3.0, 0))
+lp_neck = curve((0, 0), (0.6, -0.5), (0.85, -0.3), (1.25, 0.1), (1.6, 0.85), (1.84, 1.0), (1.98, 1.0), (2.45, 0.2), (3.0, 0))
+lp_pitch = curve((0, 0), (1.2, 0), (1.84, 1.0), (2.0, 0.8), (2.5, 0.1), (3.0, 0))
+lp_slam = curve((0, 0), (1.8, 0), (1.92, 1.0), (2.3, 0.55), (3.0, 0))
+
+
+def leap_height(t):
+    if t <= LP_T0 or t >= LP_T1:
+        return 0.0
+    mid, half = (LP_T0 + LP_T1) / 2, (LP_T1 - LP_T0) / 2
+    return LP_PEAK * (1 - ((t - mid) / half) ** 2)
+
+
+def leap_pose(rig, t, k=1.0):
+    pose = idle_pose(0.0)
+    h = leap_height(t)
+    cr, w, n, pit, slam = lp_crouch(t), lp_wing(t), lp_neck(t), lp_pitch(t), lp_slam(t)
+    for sd in "LR":
+        sg = side_sign(sd)
+        pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * -26.0 * w, sg * (-18.0 * max(-w, 0)))},
+                               f"wing_fore.{sd}": {"rot": (0, sg * -16.0 * max(w, 0), 0)},
+                               f"wing_hand.{sd}": {"rot": (0, sg * -10.0 * max(w, 0), 0)}})
+    nm = 125.0 * n * k if n > 0 else 45.0 * n
+    ns = 105.0 * n * k if n > 0 else 30.0 * n
+    pose = trio(pose, None, None, None, nm, ns, head_main=24.0 * max(n, 0) * k, head_side=20.0 * max(n, 0) * k)
+    pose = add_pose(pose, {"pelvis": {"t": (0, 0, -0.92 * cr - 0.55 * slam + 0.12 * max(-cr, 0))},
+                           "root": {"t": (0, 0, h), "rot": (26.0 * pit * k, 0, 0)}})
+
+    def legs(r):
+        out = {}
+        air = smooth(h / 0.4)
+        for sd in "LR":
+            tgt = Vector(r.rest_foot[sd])
+            tgt.z += h + 0.35 * air
+            tgt.y += -0.25 * air
+            out.update(r.leg_aims(sd, tgt, FWD, toe_deg=7.0 + 35.0 * air))
+        return out
+    return pose, legs
+
+
+ATTACKS["leap_and_dive"] = dict(T=LP_T, pose=leap_pose, hit=LP_HIT, fit=(1.55, 2.5))
+
+# --- wing_gust: wings sweep up and back, one huge forward flap, body leaning back, then fold to idle
+WG_T = 2.0
+WG_HIT = 1.0
+wg_g = curve((0, 0), (0.75, -1.0), (0.88, -1.0), (0.96, 0.8), (1.02, 1.0), (1.25, 0.55), (1.6, 0.1), (2.0, 0))
+wg_lean = curve((0, 0), (0.8, -0.25), (1.0, 1.0), (1.3, 0.75), (1.7, 0.2), (2.0, 0))
+wg_spread = curve((0, 0), (0.9, 0), (1.0, 1.0), (1.3, 0.6), (1.7, 0), (2.0, 0))
+
+
+def gust_pose(rig, t, k=1.0):
+    pose = idle_pose(0.0)
+    g, lean, spr = wg_g(t), wg_lean(t), wg_spread(t)
+    for sd in "LR":
+        sg = side_sign(sd)
+        if g < 0:
+            e = -g
+            pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * -34.0 * e, sg * 48.0 * e)},
+                                   f"wing_fore.{sd}": {"rot": (0, sg * -8.0 * e, sg * 12.0 * e)},
+                                   f"wing_hand.{sd}": {"rot": (0, sg * -10.0 * e, sg * 10.0 * e)}})
+        else:
+            pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * 24.0 * g, sg * -52.0 * g)},
+                                   f"wing_fore.{sd}": {"rot": (0, sg * 12.0 * g, sg * -10.0 * g)},
+                                   f"wing_hand.{sd}": {"rot": (0, sg * 26.0 * g, sg * -8.0 * g)}})
+        pose = add_pose(pose, {f"wing_finger_1.{sd}": {"rot": (0, 0, sg * -18.0 * spr)},
+                               f"wing_finger_3.{sd}": {"rot": (0, 0, sg * 18.0 * spr)}})
+    pose = trio(pose, None, None, None, -30.0 * lean, -26.0 * lean, head_main=-14.0 * lean, head_side=-12.0 * lean)
+    pose = add_pose(pose, {"pelvis": {"t": (0, 0.30 * max(lean, 0), -0.08 * lean)}, "root": {"rot": (-14.0 * lean, 0, 0)}})
+    return pose, planted(rig)
+
+
+ATTACKS["wing_gust"] = dict(T=WG_T, pose=gust_pose, hit=WG_HIT, fit=None)
+
+
+def solve_attack(rig, name):
+    spec = ATTACKS[name]
+    n = int(round(spec["T"] * FPS))
+    keys = []
+    for f in range(n + 1):
+        t = f / FPS
+        k = 1.0
+        window = spec["fit"]
+        pose, legs = spec["pose"](rig, t, 1.0)
+        rig.apply_pose(pose, legs)
+        if window and window[0] <= t <= window[1] and rig.min_z() < 0.002:
+            lo, hi = 0.0, 1.0
+            for _ in range(8):
+                mid = (lo + hi) / 2
+                pose, legs = spec["pose"](rig, t, mid)
+                rig.apply_pose(pose, legs)
+                if rig.min_z() >= 0.002:
+                    lo = mid
+                else:
+                    hi = mid
+            pose, legs = spec["pose"](rig, t, lo)
+            rig.apply_pose(pose, legs)
+        keys.append((f, rig.channels()))
+    return keys
+
+
 def write_action(rig, name, keys, loop):
     act = bpy.data.actions.new(name)
     act.use_fake_user = True
