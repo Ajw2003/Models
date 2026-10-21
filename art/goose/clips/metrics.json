@@ -1,0 +1,87 @@
+{
+ "idle": {
+  "frames": 120,
+  "seconds": 4.0,
+  "loop": true,
+  "min_z_m": 0.0028,
+  "min_z_frame": 92,
+  "min_z_vertex_bone": "leg_toes.L",
+  "min_z_ok": true,
+  "min_z_checked": "every frame, full mesh",
+  "loop_pose_diff_m": 0.0,
+  "measure_seconds": 2.4
+ },
+ "walk": {
+  "frames": 48,
+  "seconds": 1.6,
+  "loop": true,
+  "min_z_m": 0.0039,
+  "min_z_frame": 9,
+  "min_z_vertex_bone": "leg_toes.L",
+  "min_z_ok": true,
+  "min_z_checked": "every frame, full mesh",
+  "loop_pose_diff_m": 0.0,
+  "measure_seconds": 1.0,
+  "implied_ground_speed_mps": 0.625,
+  "stride_m": 0.6,
+  "stance_fraction": 0.6,
+  "cycle_s": 1.6,
+  "feet": {
+   "L": {
+    "planted_frames": 31,
+    "slide_speed_mean_mps": 0.6205,
+    "slide_speed_min_mps": 0.4942,
+    "slide_speed_max_mps": 0.625,
+    "max_abs_dev_from_ground_speed_mps": 0.1308,
+    "planted_lateral_drift_m": 0.0,
+    "planted_height_range_m": 0.0056
+   },
+   "R": {
+    "planted_frames": 31,
+    "slide_speed_mean_mps": 0.6205,
+    "slide_speed_min_mps": 0.4942,
+    "slide_speed_max_mps": 0.625,
+    "max_abs_dev_from_ground_speed_mps": 0.1308,
+    "planted_lateral_drift_m": 0.0,
+    "planted_height_range_m": 0.0056
+   }
+  },
+  "root_displacement_m": 0.0
+ },
+ "turn_in_place": {
+  "frames": 45,
+  "seconds": 1.5,
+  "loop": false,
+  "min_z_m": 0.0039,
+  "min_z_frame": 19,
+  "min_z_vertex_bone": "leg_toes.L",
+  "min_z_ok": true,
+  "min_z_checked": "every frame, full mesh",
+  "loop_pose_diff_m": null,
+  "measure_seconds": 1.0
+ },
+ "stagger": {
+  "frames": 36,
+  "seconds": 1.2,
+  "loop": false,
+  "min_z_m": 0.0023,
+  "min_z_frame": 27,
+  "min_z_vertex_bone": "leg_toes.L",
+  "min_z_ok": true,
+  "min_z_checked": "every frame, full mesh",
+  "loop_pose_diff_m": null,
+  "measure_seconds": 0.8
+ },
+ "death": {
+  "frames": 120,
+  "seconds": 4.0,
+  "loop": false,
+  "min_z_m": 0.0039,
+  "min_z_frame": 15,
+  "min_z_vertex_bone": "leg_toes.L",
+  "min_z_ok": true,
+  "min_z_checked": "every frame, full mesh",
+  "loop_pose_diff_m": null,
+  "measure_seconds": 2.7
+ }
+}
