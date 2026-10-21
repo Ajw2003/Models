@@ -3,6 +3,37 @@
 The running log of what was decided in this repo, when and why. Newest entry at the top. Entries
 are never rewritten; a later decision flips an old entry's Status to Superseded with a pointer.
 
+## 2026-10-21 — Goose animation version 2: slower, forward death, longer transition, stun and hits
+
+**Context.** aj checked the 13 version 1 clips in pull request #7 and asked for five changes, keeping
+version 1 for comparison. The proposal page `docs/plans/2026-10-21-goose-animation-v2.html` put six
+choices to aj.
+
+**Decision.** aj approved "Design approved: goose animation v2 1A 2A 3A 4A 5A 6*":
+
+- Tempo (question 1): option A, every clip 1.4 times as long, with heavier wind-ups, strain at the
+  strike and heaving recovery.
+- Comparison (question 2): option A, version 2 in its own files (`goose_rigged_v2.blend`,
+  `goose_animated_v2.blend`, `goose_anims_v2.fbx`, `art/goose/clips_v2/`) plus a side-by-side video
+  per clip that exists in both versions. Version 1 files are not rebuilt.
+- Tongues (question 3): option A, three bones per tongue on a version 2 rig of 68 bones; the mesh is
+  unchanged.
+- Phase transition (question 4): option A, The Crown Wakes as a 12-second set piece.
+- Stun (question 5): option A, three clips: stun_fall, stun_loop, stun_get_up.
+- Hits (question 6, aj's own answer): option A's four (front, left, right, heavy) plus hit_back: hit
+  from behind, the goose turns round to face the attacker and shows more anger. The anger is in the
+  animation; any gameplay effect belongs to the game.
+
+Version 2 has 20 clips: idle, walk, turn_in_place, the 7 attacks, death (forward), crown_wakes, the
+3 stun clips and the 5 hit reactions. Version 1's stagger is not carried into version 2.
+
+**Why.** aj's notes: the goose is a huge ancient beast and should look like it works hard to kill
+you; death forward lets the heads lie flat; the phase transition should be a spectacle; a stun gives
+a punish window; varied hits stop one clip looking replayed.
+
+**Status.** Standing. Version 1 (the entry "Goose boss animation: seven attacks...") also stands;
+both versions are kept.
+
 ## 2026-10-21 — Goose boss animation build plan approved
 
 **Context.** The design approved earlier today became a build plan of five issues under #1

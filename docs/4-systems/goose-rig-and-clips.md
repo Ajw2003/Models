@@ -49,3 +49,17 @@ animation-only FBX that carries them, and the clip manifest an engine importer r
 - Cycles on CPU only in the cloud sandbox; EEVEE and Workbench abort without a GPU.
 - The mesh is 272,380 triangles, so automatic weighting and every render are slow; quick-look
   renders use a low sample count.
+
+## Version 2 (approved 2026-10-21, not built yet)
+
+Version 2 is built beside version 1 by the same scripts with a version switch; version 1's files are
+never rebuilt. `build_rig.py` writes `goose_rigged_v2.blend` with 68 bones (59 plus `tongue_<head>_1..3`
+for the main, left and right heads). `goose_clips.py` applies a global tempo of 1.4 and an effort layer
+(deeper anticipation, strain shudder at strikes, heaving recovery) and writes `goose_animated_v2.blend`,
+`goose_anims_v2.fbx` and `art/goose/clips_v2/` (sheets, MP4s, metrics, manifest, and a
+`<clip>_compare.mp4` with version 1 left and version 2 right for each shared clip).
+
+Version 2 clips (20): idle, walk, turn_in_place; hesitation_peck, flapping_charge, leap_and_dive,
+wing_gust, turning_tail_sweep, neck_lunge_grab, death_honk; death (falls forward, necks flat, jaws
+slack, tongues out); crown_wakes (12 s); stun_fall, stun_loop (loops), stun_get_up; hit_front,
+hit_left, hit_right, hit_heavy, hit_back (turns round to face the attacker, angrier).
