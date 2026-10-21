@@ -1,0 +1,7 @@
+{
+  "model": "art/goose/goose_animated.blend",
+  "sheet": "docs/art/reviews/goose-clips-review.png",
+  "verdict": "pass",
+  "seen": "idle: subtle breathing, neck sway and wing drift, loops exactly. walk: low waddle, feet planted then lifted, no sliding beyond ground speed. turn: 90 degrees right with stepping feet. stagger: heads thrown back then recover. death: legs buckle, rolls onto its left side, necks fall to the floor and it lies still; no vertex below floor, no tearing.",
+  "date": "2026-10-21T07:54:01+0000"
+}
