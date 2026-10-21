@@ -930,8 +930,162 @@ def crown_pose(rig, t, k=1.0):
 ATTACKS["crown_wakes"] = dict(T=CW_T, pose=crown_pose, hit=CW_ROAR, fit=(1.2, 4.0), markers={"roar": CW_ROAR})
 
 
-def solve_attack(rig, name):
-    spec = ATTACKS[name]
+# ---------------------------------------------------------------- version 2: tempo and effort layer
+# Version 2 plays every shared clip at TEMPO times its version 1 length. The version 1 pose functions are evaluated
+# at tau = t * (v1_frames / v2_frames), so all timings (the easing, the holds, the markers) scale together rather
+# than being resampled, and an effort layer is added on top of the scaled pose. It is zero at the first and last
+# frame, so every clip still starts and ends on the version 2 idle's first frame.
+
+TEMPO = 1.4
+V2_CLIPS = (("idle", True), ("walk", True), ("turn_in_place", False), ("hesitation_peck", False),
+            ("flapping_charge", False), ("leap_and_dive", False), ("wing_gust", False),
+            ("turning_tail_sweep", False), ("neck_lunge_grab", False), ("death_honk", False))
+MARKER_SCALE = {}
+V1_RATIO = {}  # clip -> v1 frames / v2 frames (v1 seconds per v2 second)
+
+
+def v1_frame_count(name):
+    with open(os.path.join(HERE, "clips", "metrics.json")) as f:  # read-only: version 1's measurements
+        return json.load(f)[name]["frames"]
+
+
+def v2_frame_count(name):
+    return int(round(v1_frame_count(name) * TEMPO))
+
+
+# the wind-up window of each attack, in version 1 seconds: (start, rise, hold end, release)
+EFFORT_WIND = {
+    "hesitation_peck": ((0, 0), (0.9, 1), (1.5, 1), (1.58, 0)),
+    "flapping_charge": ((0, 0), (0.5, 1), (0.62, 1), (0.8, 0)),
+    "leap_and_dive": ((0, 0), (0.6, 1), (0.78, 1), (0.88, 0)),
+    "wing_gust": ((0, 0), (0.75, 1), (0.88, 1), (0.96, 0)),
+    "turning_tail_sweep": ((0, 0), (0.4, 1), (0.5, 1), (0.9, 0)),
+    "neck_lunge_grab": ((0, 0), (0.7, 1), (0.95, 1), (1.1, 0)),
+    "death_honk": ((0, 0), (0.8, 1), (0.92, 1), (1.02, 0)),
+}
+
+
+def effort_pose(name, tau, t, T1, T2):
+    """The effort layer for an attack: a deeper wind-up, a strain shudder at the strike, a sag after it, and heaving breath."""
+    h = ATTACKS[name]["hit"]
+    wind = max(0.0, min(1.0, pchip(list(EFFORT_WIND[name]), tau)))
+    pose = {"pelvis": {"t": (0, 0.05 * wind, -0.16 * wind)}, "spine_3": {"rot": (-5.0 * wind, 0, 0)}}
+    pose = add_pose(pose, neck_pose(NECK_MAIN, x=-12.0 * wind))
+    pose = add_pose(pose, neck_pose(NECK_L, x=-10.0 * wind))
+    pose = add_pose(pose, neck_pose(NECK_R, x=-10.0 * wind))
+    th = h * T2 / T1  # the strike in version 2 seconds
+    win = smooth((t - (th - 0.04)) / 0.04) * (1 - smooth((t - (th + 0.16)) / 0.08))  # about 0.2 s of strain
+    osc = math.sin(2 * math.pi * 11.0 * t) * win
+    pose = add_pose(pose, neck_pose(NECK_MAIN, x=3.0 * osc, z=1.5 * osc))
+    pose = add_pose(pose, neck_pose(NECK_L, x=3.6 * osc))
+    pose = add_pose(pose, neck_pose(NECK_R, x=-3.6 * osc))
+    for sd in "LR":
+        sg = side_sign(sd)
+        pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * 3.2 * osc, 0)}, f"wing_fore.{sd}": {"rot": (0, sg * -3.6 * osc, 0)}})
+    sag = max(0.0, min(1.0, pchip([(h, 0), (h + 0.15, 1.0), (T1 - 0.1, 0)], tau))) if tau > h else 0.0
+    pose = add_pose(pose, {"pelvis": {"t": (0, 0, -0.14 * sag)}, "spine_3": {"rot": (4.0 * sag, 0, 0)}})
+    pose = add_pose(pose, neck_pose(NECK_MAIN, x=6.0 * sag))
+    pose = add_pose(pose, neck_pose(NECK_L, x=6.0 * sag))
+    pose = add_pose(pose, neck_pose(NECK_R, x=6.0 * sag))
+    a, b = h + 0.25, T1 - 0.12
+    heave_env = max(0.0, min(1.0, pchip([(a, 0), (a + 0.2, 1), (b - 0.2, 1), (b, 0)], tau))) if b - 0.2 > a + 0.2 else 0.0
+    br = math.sin(2 * math.pi * 0.75 * t) * heave_env
+    pose = add_pose(pose, {"spine_2": {"scale": 1.0 + 0.055 * br}, "spine_3": {"scale": 1.0 - 0.05 * br},
+                           "pelvis": {"t": (0, 0, 0.02 * br)}})
+    return pose
+
+
+def idle_v2_pose(t, T2):
+    """Slower, heavier breathing (twice the chest and pelvis motion), and a weight shift each way once a loop."""
+    tau = t * (4.0 / T2)
+    base0 = idle_pose(0.0)
+    delta = add_pose(idle_pose(tau), base0, -1.0)
+    for bone, gain in (("spine_2", 2.0), ("spine_3", 2.0), ("pelvis", 2.0)):
+        e = delta.get(bone)
+        if e:
+            for key in ("rot", "t"):
+                if key in e:
+                    e[key] = tuple(gain * x for x in e[key])
+            if "scale" in e:
+                e["scale"] = 1.0 + gain * (e["scale"] - 1.0)
+    pose = add_pose(base0, delta)
+    f = T2 / 5.6
+    sw1 = max(0.0, min(1.0, pchip([(1.2 * f, 0), (1.9 * f, 1), (2.9 * f, 1), (3.6 * f, 0)], t)))
+    sw2 = max(0.0, min(1.0, pchip([(3.9 * f, 0), (4.5 * f, 1), (5.0 * f, 1), (5.4 * f, 0)], t)))
+    shift = sw1 - sw2
+    pose = add_pose(pose, {"pelvis": {"t": (0.05 * shift, 0, -0.02 * abs(shift)), "rot": (0, 1.6 * shift, 0)},
+                           "spine_2": {"rot": (0, -1.2 * shift, 0)}})
+    return pose
+
+
+def solve_v2(rig, name):
+    n1 = v1_frame_count(name)
+    n2 = v2_frame_count(name)
+    ratio = n1 / n2
+    V1_RATIO[name] = ratio
+    MARKER_SCALE[name] = 1.0 / ratio
+    T1, T2 = n1 / FPS, n2 / FPS
+    keys = []
+    if name == "idle":
+        for f in range(n2 + 1):
+            rig.apply_pose(idle_v2_pose(f / FPS, T2), planted(rig))
+            keys.append((f, rig.channels()))
+    elif name == "walk":
+        WALK_REST_FOOT.update({s_: tuple(rig.rest_foot[s_]) for s_ in "LR"})
+        for f in range(n2 + 1):
+            t = f / FPS
+            tau = t * ratio
+            w = 2 * math.pi * ((tau / WALK_T) % 1.0)
+            body = add_pose(walk_body(tau), {"pelvis": {"t": (0.03 * math.sin(w), 0, -0.03 - 0.02 * (1 - math.cos(2 * w))),
+                                                        "rot": (0, 2.0 * math.sin(w), 0)},
+                                             "spine_1": {"rot": (0, 0, 1.5 * math.sin(w))}})
+
+            def legs(r, tau=tau):
+                out = {}
+                for s_ in "LR":
+                    foot, toe = walk_foot(s_, tau)
+                    out.update(r.leg_aims(s_, foot, FWD, toe_deg=toe))
+                return out
+            rig.apply_pose(body, legs)
+            keys.append((f, rig.channels()))
+    elif name == "turn_in_place":
+        base0 = idle_pose(0.0)
+        b0 = turn_body(0.0)
+        # each landing is a thud: a short dip of the pelvis (landing times are version 1 seconds)
+        lands = sorted(b for steps in STEPS.values() for (_, b, _) in steps)
+        for f in range(n2 + 1):
+            t = f / FPS
+            tau = t * ratio
+            delta = add_pose(turn_body(tau), b0, -1.0)
+            thud = max(math.exp(-(((tau - lb) / 0.06) ** 2)) for lb in lands)
+            pose = add_pose(add_pose(base0, delta), {"pelvis": {"t": (0, 0, -0.07 * thud)}})
+
+            def legs(r, tau=tau):
+                out = {}
+                for s_ in "LR":
+                    foot, yaw, toe = turn_foot(r, s_, tau)
+                    facing = Matrix.Rotation(math.radians(yaw), 3, "Z") @ FWD
+                    out.update(r.leg_aims(s_, foot, facing, toe_deg=toe))
+                return out
+            rig.apply_pose(pose, legs)
+            keys.append((f, rig.channels()))
+    elif name in ATTACKS:
+        spec1 = ATTACKS[name]
+
+        def pose_fn(rig_, t, k, spec1=spec1):
+            tau = t * ratio
+            pose, legs = spec1["pose"](rig_, tau, k)
+            return add_pose(pose, effort_pose(name, tau, t, T1, T2)), legs
+        fit = spec1["fit"]
+        spec2 = dict(T=T2, pose=pose_fn, hit=spec1["hit"] / ratio, fit=(fit[0] / ratio, fit[1] / ratio) if fit else None)
+        keys = solve_attack(rig, name, spec2)
+    else:
+        die(f"no version 2 clip {name}")
+    return keys
+
+
+def solve_attack(rig, name, spec=None):
+    spec = spec or ATTACKS[name]
     n = int(round(spec["T"] * FPS))
     keys = []
     lifted = []
@@ -997,7 +1151,7 @@ def write_action(rig, name, keys, loop):
     if name in ATTACKS:  # the events, as timeline markers on the action
         for mname, mtime in attack_markers(name).items():
             mk = act.pose_markers.new(mname)
-            mk.frame = int(round(mtime * FPS))
+            mk.frame = int(round(mtime * MARKER_SCALE.get(name, 1.0) * FPS))
     act.frame_start, act.frame_end = 0, keys[-1][0]
     act.use_frame_range = True
     rig.arm.animation_data.action = None
@@ -1030,7 +1184,7 @@ def slide_stats(rig, foot, frames, ground_speed):
     return rec
 
 
-def measure(rig, name, act, loop):
+def measure(rig, name, act, loop, ratio=1.0):
     idle0 = snapshot(rig, bpy.data.actions["idle"], 0)
     rig.arm.animation_data.action = act
     rig.mod.show_viewport = True
@@ -1067,7 +1221,7 @@ def measure(rig, name, act, loop):
         if f == f0:
             pose_first = snap
         pose_last = snap
-    out = {"frames": f1 - f0, "seconds": (f1 - f0) / FPS, "loop": bool(loop), "min_z_m": round(minz, 4),
+    out = {"frames": f1 - f0, "seconds": (f1 - f0) / FPS, **({"v1_frames": v1_frame_count(name), "tempo": round(1 / ratio, 4)} if ratio != 1.0 else {}), "loop": bool(loop), "min_z_m": round(minz, 4),
            "min_z_frame": minz_at, "min_z_vertex_bone": low_group, "min_z_ok": minz >= -FLOOR_TOL, "min_z_checked": "every frame, full mesh",
            "loop_pose_diff_m": round(float(np.abs(pose_first - pose_last).max()), 6) if loop else None,
            "measure_seconds": round(time.time() - t0, 1)}
@@ -1081,7 +1235,7 @@ def measure(rig, name, act, loop):
         out["hit_normalised"] = round(hit[0] / (f1 - f0), 4) if hit else None
         out["crown_scales_last_frame"] = {c: round(float(v), 3) for c, v in crown_last.items()}
         if name == "neck_lunge_grab":
-            hf = int(round(NL_HIT * FPS))
+            hf = hit[0] if hit else int(round(NL_HIT * FPS))
             out["head_main_at_hit_m"] = {"forward_from_root": round(float(-headpos[hf][1]), 2), "height": round(float(headpos[hf][2]), 2)}
             out["head_main_max_forward_m"] = round(float(-headpos[:, 1].min()), 2)
         out["first_frame_vs_idle0_pose_diff_m"] = round(float(np.abs(pose_first - idle0).max()), 6)
@@ -1089,11 +1243,11 @@ def measure(rig, name, act, loop):
         out["root_peak_z_m"] = round(float(rootz.max()), 3)
         out["root_max_xy_m"] = round(float(np.abs(rootxy).max()), 4)
         if name == "flapping_charge":
-            run = range(int(0.95 * FPS), int(1.65 * FPS))
-            out["implied_ground_speed_mps"] = round(CH_GROUND_SPEED, 3)
-            out["stride_m"], out["stance_fraction"], out["step_cycle_s"] = CH_STRIDE, CH_DUTY, CH_RUN_T
+            run = range(int(0.95 * FPS / ratio), int(1.65 * FPS / ratio))
+            out["implied_ground_speed_mps"] = round(CH_GROUND_SPEED * ratio, 3)
+            out["stride_m"], out["stance_fraction"], out["step_cycle_s"] = CH_STRIDE, CH_DUTY, round(CH_RUN_T / ratio, 4)
             out["run_window_s"] = [run.start / FPS, run.stop / FPS]
-            out["feet"] = slide_stats(rig, foot, run, CH_GROUND_SPEED)
+            out["feet"] = slide_stats(rig, foot, run, CH_GROUND_SPEED * ratio)
     if name == "walk":
         dt = 1.0 / FPS
         rec = {}
@@ -1106,14 +1260,19 @@ def measure(rig, name, act, loop):
                 if planted_f[i] and planted_f[i + 1]:
                     sp.append((fp[i + 1, 1] - fp[i, 1]) / dt)
             sp = np.array(sp)
+            tight = fp[:, 2] < rig.rest_foot[s].z + 0.0005  # frames with the foot flat on the floor, no lift yet
+            steady = np.array([abs((fp[i + 1, 1] - fp[i, 1]) / dt) - WALK_GROUND_SPEED * ratio for i in range(len(fp) - 1)
+                               if tight[i] and tight[i + 1]])
             rec[s] = {"planted_frames": int(planted_f.sum()), "slide_speed_mean_mps": round(float(sp.mean()), 4),
                       "slide_speed_min_mps": round(float(sp.min()), 4), "slide_speed_max_mps": round(float(sp.max()), 4),
-                      "max_abs_dev_from_ground_speed_mps": round(float(np.abs(sp - WALK_GROUND_SPEED).max()), 4),
+                      "max_abs_dev_from_ground_speed_mps": round(float(np.abs(sp - WALK_GROUND_SPEED * ratio).max()), 4),
+                      "mean_dev_from_ground_speed_pct": round(float(100 * (sp.mean() / (WALK_GROUND_SPEED * ratio) - 1)), 2),
+                      "steady_frames_dev_pct": round(float(100 * (np.abs(steady).max() / (WALK_GROUND_SPEED * ratio) - 0)), 2) if len(steady) else None,
                       "planted_lateral_drift_m": round(float(np.ptp(fp[planted_f, 0])), 4),
                       "planted_height_range_m": round(float(np.ptp(fp[planted_f, 2])), 4)}
             speeds_all += list(sp)
-        out["implied_ground_speed_mps"] = round(WALK_GROUND_SPEED, 4)
-        out["stride_m"], out["stance_fraction"], out["cycle_s"] = WALK_STRIDE, WALK_DUTY, WALK_T
+        out["implied_ground_speed_mps"] = round(WALK_GROUND_SPEED * ratio, 4)
+        out["stride_m"], out["stance_fraction"], out["cycle_s"] = WALK_STRIDE, WALK_DUTY, round(WALK_T / ratio, 4)
         out["feet"] = rec
         out["root_displacement_m"] = 0.0
     rig.arm.animation_data.action = None
@@ -1127,17 +1286,18 @@ def build():
     bpy.context.scene.render.fps = FPS
     metrics = {}
     acts = {}
-    for name, loop in CLIP_LIST:
+    clips = V2_CLIPS if V2 else CLIP_LIST
+    for name, loop in clips:
         t1 = time.time()
         rig.reach_err = 0.0
-        keys = solve_clip(rig, name)
+        keys = solve_v2(rig, name) if V2 else solve_clip(rig, name)
         acts[name] = write_action(rig, name, keys, loop)
         print(f"goose_clips: {name}: {len(keys)} keys, frames 0..{keys[-1][0]}, IK reach shortfall "
               f"{rig.reach_err:.3f} m, solved in {time.time() - t1:.1f} s")
         rig.reach_err = 0.0
     bpy.context.scene.frame_start, bpy.context.scene.frame_end = 0, 120
-    for name, loop in CLIP_LIST:
-        metrics[name] = measure(rig, name, acts[name], loop)
+    for name, loop in clips:
+        metrics[name] = measure(rig, name, acts[name], loop, V1_RATIO.get(name, 1.0))
         print(f"goose_clips: {name}: {json.dumps(metrics[name])}")
     rig.reset()
     rig.mod.show_viewport = True
@@ -1145,7 +1305,8 @@ def build():
     os.makedirs(CLIPS_DIR, exist_ok=True)
     with open(os.path.join(CLIPS_DIR, "metrics.json"), "w") as f:
         json.dump(metrics, f, indent=1)
-    write_manifest(metrics)
+    if not V2:  # (the version 2 manifest comes with the full clip list)
+        write_manifest(metrics)
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(HERE, ANIMATED), compress=True)
     bad = [n for n, m in metrics.items() if not m["min_z_ok"]]
     print(f"goose_clips: wrote {ANIMATED} and {os.path.basename(CLIPS_DIR)}/metrics.json in {time.time() - t0:.1f} s")
@@ -1418,12 +1579,44 @@ def export_fbx():
         die("export check failed:\n  " + "\n  ".join(problems))
 
 
+def compare(names):
+    """clips_v2/<clip>_compare.mp4: the version 1 MP4 on the left, version 2 on the right, the shorter held on its last frame."""
+    import subprocess
+    font = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    for name in names or [n for n, _ in V2_CLIPS]:
+        a, b = os.path.join(HERE, "clips", f"{name}.mp4"), os.path.join(CLIPS_DIR, f"{name}.mp4")
+        if not (os.path.isfile(a) and os.path.isfile(b)):
+            die(f"compare needs {a} and {b}")
+
+        def dur(path):
+            r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+                               capture_output=True, text=True)
+            return float(r.stdout.strip())
+        d1, d2 = dur(a), dur(b)
+        hold = max(0.0, d2 - d1)
+        label = lambda txt: f"drawtext=fontfile={font}:text={txt}:x=12:y=10:fontsize=30:fontcolor=#14120E:box=1:boxcolor=#EDE6D6@0.8:boxborderw=6"
+        graph = (f"[0:v]tpad=stop_mode=clone:stop_duration={hold + 0.2:.3f},{label('v1')}[l];"
+                 f"[1:v]tpad=stop_mode=clone:stop_duration={max(0.0, d1 - d2) + 0.2:.3f},{label('v2')}[r];"
+                 f"[l][r]hstack=inputs=2,trim=duration={max(d1, d2):.3f}[v]")
+        out = os.path.join(CLIPS_DIR, f"{name}_compare.mp4")
+        cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", a, "-i", b, "-filter_complex", graph, "-map", "[v]",
+               "-c:v", "libx264", "-pix_fmt", "yuv420p", out]
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode != 0:
+            die(f"ffmpeg compare failed for {name}: {r.stderr[:300]}")
+        print(f"goose_clips: {name}_compare.mp4: v1 {d1:.2f} s | v2 {d2:.2f} s")
+
+
 def main():
-    if not ARGS or ARGS[0] not in ("build", "render", "export"):
-        die("usage: goose_clips.py [--v2] build | render [clip ...] | export")
-    if V2:
-        die("version 2: the rig and the paths are switched, but no version 2 clips exist yet (issues #10 onward), so there is nothing to build")
-    if ARGS[0] == "build":
+    if not ARGS or ARGS[0] not in ("build", "render", "export", "compare"):
+        die("usage: goose_clips.py [--v2] build | render [clip ...] | export | compare [clip ...]")
+    if V2 and ARGS[0] == "export":
+        die("version 2: the export waits for the full clip list (a later issue)")
+    if ARGS[0] == "compare":
+        if not V2:
+            die("compare is a version 2 command: use --v2")
+        compare(ARGS[1:])
+    elif ARGS[0] == "build":
         build()
     elif ARGS[0] == "export":
         export_fbx()
