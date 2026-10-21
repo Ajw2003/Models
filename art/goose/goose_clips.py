@@ -190,7 +190,7 @@ class Rig:
         rest = self.arm.matrix_world @ b.matrix_local
         return self.arm.pose.bones["pelvis"].matrix @ rest.inverted()
 
-    def min_z(self, body_only=False):
+    def min_z(self, body_only=False, core=False):
         self.mod.show_viewport = True
         dg = bpy.context.evaluated_depsgraph_get()
         ev = self.obj.evaluated_get(dg)
@@ -200,6 +200,13 @@ class Rig:
         ev.to_mesh_clear()
         self.mod.show_viewport = False
         z = co[2::3]
+        if core:  # the trunk and legs only: no wings, necks, heads, jaws, crowns or tongues
+            if not hasattr(self, "_core_mask"):
+                names = [g.name for g in self.obj.vertex_groups]
+                skip = ("neck_", "head_", "jaw_", "crown_", "tongue_", "wing_")
+                self._core_mask = np.array([not names[max(v.groups, key=lambda g: g.weight).group].startswith(skip)
+                                            for v in self.obj.data.vertices])
+            return float(z[self._core_mask].min())
         if body_only:  # everything except the three necks, heads, jaws and crowns
             if not hasattr(self, "_body_mask"):
                 names = [g.name for g in self.obj.vertex_groups]
@@ -1066,9 +1073,185 @@ def idle_v2_pose(t, T2):
     return pose
 
 
+# ---------------------------------------------------------------- version 2: death and crown_wakes
+# Both clips settle onto the floor. Their poses take a tuple of floor-limited amounts ks (each 0..1): the frame is
+# solved by lifting the root until the trunk is clear of the floor, then backing each amount off in turn (wings, then
+# necks, then jaws, then tongues) just far enough that nothing is below the floor. That is what lays the necks flat and
+# lets the tongues loll onto the ground instead of through it.
+
+V2_FLOOR_CLIPS = ("death", "crown_wakes")
+V2_CLIPS_B = (("death", False), ("crown_wakes", False))
+V2_MARKERS = {}
+
+
+def solve_floor(rig, n, pose_fn, nparams):
+    keys = []
+    lifted = []
+    for f in range(n + 1):
+        t = f / FPS
+        ks = [0.0] * nparams
+        pose, legs = pose_fn(rig, t, ks)
+        rig.apply_pose(pose, legs)
+        z = rig.min_z(core=True)
+        lift = max(0.0, 0.004 - z)
+        liftpose = {"root": {"t": (0, 0, lift)}} if lift else {}
+        for i in range(nparams):
+            ks[i] = 1.0
+            pose, legs = pose_fn(rig, t, ks)
+            rig.apply_pose(add_pose(pose, liftpose), legs)
+            if rig.min_z() >= 0.002:
+                continue
+            lo, hi = 0.0, 1.0
+            for _ in range(7):
+                mid = (lo + hi) / 2
+                ks[i] = mid
+                pose, legs = pose_fn(rig, t, ks)
+                rig.apply_pose(add_pose(pose, liftpose), legs)
+                if rig.min_z() >= 0.002:
+                    lo = mid
+                else:
+                    hi = mid
+            ks[i] = lo
+        pose, legs = pose_fn(rig, t, ks)
+        pose = add_pose(pose, liftpose)
+        rig.apply_pose(pose, legs)
+        z = rig.min_z()
+        if z < 0.002:
+            pose = add_pose(pose, {"root": {"t": (0, 0, 0.002 - z)}})
+            rig.apply_pose(pose, legs)
+        if lift:
+            lifted.append(lift)
+        keys.append((f, rig.channels()))
+    if lifted:
+        print(f"goose_clips: floor fit lifted the trunk on {len(lifted)} frames, by up to {max(lifted):.3f} m")
+    return keys
+
+
+def shudder_pose(t, times, dur=0.3, neck_deg=3.5, wing_deg=3.0, chains=(NECK_MAIN, NECK_L, NECK_R)):
+    """Strain shudder: 5 Hz, per bone, for dur seconds from each time."""
+    pose = {}
+    for i, th in enumerate(times):
+        win = smooth((t - th) / 0.05) * (1 - smooth((t - (th + dur - 0.08)) / 0.08))
+        if win <= 0:
+            continue
+        osc = math.sin(2 * math.pi * 5.0 * (t - th)) * win
+        for ci, chain in enumerate(chains):
+            sgn = 1 if ci != 2 else -1
+            for n in chain:
+                pose = add_pose(pose, {n: {"rot": (sgn * neck_deg * 0.7 * osc, 0, neck_deg * 0.7 * osc)}})
+        for sd in "LR":
+            sg = side_sign(sd)
+            pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * wing_deg * osc, 0)},
+                                   f"wing_fore.{sd}": {"rot": (0, sg * -wing_deg * 0.8 * osc, 0)}})
+    return pose
+
+
+# --- death: collapse FORWARD onto the chest, wings splayed, necks flat in front, jaws slack, tongues out, then still
+DV_T = 5.6
+dv_c = envelope((0, 0), (0.45, 0), (1.3, 0.4), (1.95, 1.0), (2.4, 1.0))
+dv_a = curve((0, 0), (0.08, -0.1), (0.4, 0.8), (0.9, 0.4), (1.4, 0.1), (2.0, 0.0), (5.6, 0))
+dv_neck = envelope((0, 0), (1.5, 0), (2.4, 1.0), (3.0, 1.0))
+dv_jaw = envelope((0, 0), (1.9, 0), (2.8, 1.0), (3.1, 1.0))
+dv_tongue = envelope((0, 0), (2.2, 0), (3.2, 1.0), (3.3, 1.0))
+dv_wing = envelope((0, 0), (1.3, 0), (2.2, 1.0), (2.6, 1.0))
+
+
+def death2_pose(rig, t, ks):
+    kw, kn, kj, kt = ks
+    pose = add_pose(idle_pose(0.0), RECOIL, dv_a(t))
+    c = dv_c(t)
+    pose = add_pose(pose, {"pelvis": {"t": (0, -0.9 * c, -1.15 * c)}, "root": {"rot": (30.0 * c, 0, 0)}})
+    w = dv_wing(t) * kw
+    for sd in "LR":
+        sg = side_sign(sd)
+        pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * 38.0 * w, sg * -12.0 * w)},
+                               f"wing_fore.{sd}": {"rot": (0, sg * 22.0 * w, 0)}, f"wing_hand.{sd}": {"rot": (0, sg * 18.0 * w, 0)}})
+    nf = dv_neck(t) * kn
+    pose = add_pose(pose, neck_pose(NECK_MAIN, x=118.0 * nf))
+    pose = add_pose(pose, neck_pose(NECK_L, x=112.0 * nf, z=24.0 * nf))
+    pose = add_pose(pose, neck_pose(NECK_R, x=112.0 * nf, z=-24.0 * nf))
+    for hd, jw in zip(HEADS, JAWS):
+        pose = add_pose(pose, {hd: {"rot": (26.0 * nf, 0, 0)}, jw: {"rot": (56.0 * dv_jaw(t) * kj, 0, 0)}})
+    tf = dv_tongue(t) * kt
+    for lab in ("main", "L", "R"):
+        for i in (1, 2, 3):
+            pose = add_pose(pose, {f"tongue_{lab}_{i}": {"rot": (30.0 * tf, 0, 0)}})
+    pose = add_pose(pose, shudder_pose(t, [2.0], dur=0.4))  # the impact
+    return pose, planted(rig)
+
+
+# --- crown_wakes: dead-looking collapse, stillness and a twitch, side heads rise one at a time, the main head drags up
+# while the crowns crack and grow in three jolts, the wings slam the ground and spread, three roars and a roar together
+CW2_T = 12.0
+cw2_stagger = curve((0, 0), (0.1, -0.1), (0.4, 1.0), (0.8, 0.6), (1.5, 0.0), (12, 0))
+cw2_kneel = envelope((0, 0), (0.4, 0), (1.5, 1.0), (7.8, 1.0), (9.3, 0.12), (12, 0.12))
+cw2_main = envelope((0, 0), (0.6, 0), (1.5, 1.0), (5.5, 1.0), (6.2, 0.8), (6.5, 0.8), (7.0, 0.35), (7.2, 0.35), (7.8, 0.0), (12, 0))
+cw2_sideL = envelope((0, 0), (0.6, 0), (1.5, 1.0), (3.0, 1.0), (3.9, 0.0), (12, 0))
+cw2_sideR = envelope((0, 0), (0.6, 0), (1.5, 1.0), (4.3, 1.0), (5.2, 0.0), (12, 0))
+cw2_crown = curve((0, 1.0), (5.8, 1.0), (6.1, 1.22), (6.25, 1.17), (6.8, 1.17), (7.0, 1.40), (7.15, 1.33), (7.5, 1.33),
+                  (7.7, 1.58), (7.9, 1.5), (12, 1.5))
+cw2_wing = curve((0, 0), (1.5, -0.35), (7.8, -0.35), (8.25, 1.0), (8.5, 0.9), (9.1, 0.2), (9.5, 1.0), (11.7, 1.0), (12, 0.5))
+cw2_slam = envelope((0, 0), (8.3, 0), (8.6, 1.0), (8.9, 1.0), (9.2, 0))
+cw2_roar = {"L": envelope((9.4, 0), (9.7, 1), (10.05, 1), (10.3, 0)), "R": envelope((9.9, 0), (10.2, 1), (10.55, 1), (10.8, 0)),
+            "main": envelope((10.4, 0), (10.7, 1), (11.05, 1), (11.3, 0))}
+cw2_all = envelope((10.9, 0), (11.1, 1), (11.7, 1), (11.95, 0))
+cw2_low = envelope((11.5, 0), (12.0, 1.0))
+CW2_MARKERS = {"roar_1": 9.7, "roar_2": 10.2, "roar_3": 10.7, "roar_all": 11.1}
+cw2_breath_env = envelope((5.5, 0), (6.0, 1.0), (11.4, 1.0), (11.8, 0))
+
+
+def crown2_pose(rig, t, ks):
+    kw, kn = ks
+    pose = add_pose(idle_pose(0.0), RECOIL, 0.8 * cw2_stagger(t))
+    kn_ = cw2_kneel(t)
+    mn, sl, sr = cw2_main(t) * kn, cw2_sideL(t) * kn, cw2_sideR(t) * kn
+    all_ = cw2_all(t)
+    ro = {"main": max(cw2_roar["main"](t), all_), "L": max(cw2_roar["L"](t), all_), "R": max(cw2_roar["R"](t), all_)}
+    lo = cw2_low(t)
+    pose = add_pose(pose, neck_pose(NECK_MAIN, x=55.0 * mn - 36.0 * ro["main"] + 8.0 * lo))
+    pose = add_pose(pose, neck_pose(NECK_L, x=98.0 * sl - 32.0 * ro["L"] + 10.0 * lo))
+    pose = add_pose(pose, neck_pose(NECK_R, x=98.0 * sr - 32.0 * ro["R"] + 10.0 * lo))
+    for hd, jw, lab, limp in (("head_main", "jaw_main", "main", mn), ("head_L", "jaw_L", "L", sl), ("head_R", "jaw_R", "R", sr)):
+        pose = add_pose(pose, {hd: {"rot": ((30.0 if lab == "main" else 40.0) * limp - 22.0 * ro[lab], 0, 0)},
+                               jw: {"rot": (10.0 * limp + 50.0 * ro[lab], 0, 0)}})
+        for i in (1, 2, 3):  # tongues hang while limp, lash out with each roar
+            pose = add_pose(pose, {f"tongue_{lab}_{i}": {"rot": (14.0 * limp + 8.0 * ro[lab], 0, 0)}})
+    # shudders: the twitch, each side head as it rises, the three crown jolts, the wing slam, each roar
+    pose = add_pose(pose, shudder_pose(t, [2.5], dur=0.3, neck_deg=2.5))
+    pose = add_pose(pose, shudder_pose(t, [3.1, 3.5], dur=0.3, chains=(NECK_L,)))
+    pose = add_pose(pose, shudder_pose(t, [4.4, 4.8], dur=0.3, chains=(NECK_R,)))
+    pose = add_pose(pose, shudder_pose(t, [6.1, 7.0, 7.7], dur=0.3, chains=(NECK_MAIN,), wing_deg=0.0))
+    pose = add_pose(pose, shudder_pose(t, [8.6], dur=0.35, chains=(), wing_deg=3.0))
+    pose = add_pose(pose, shudder_pose(t, [9.7, 10.2, 10.7, 11.1], dur=0.3, neck_deg=3.0, wing_deg=2.0))
+    cr = cw2_crown(t)
+    jolt = jab(t, [6.1, 7.0, 7.7], 0.06)
+    for i, c in enumerate(CROWNS):
+        pose = add_pose(pose, {c: {"scale": cr, "rot": (0, 6.0 * jolt * (1 if i % 2 == 0 else -1), 4.0 * jolt)}})
+    u = cw2_wing(t)
+    sl_ = cw2_slam(t) * kw
+    for sd in "LR":
+        sg = side_sign(sd)
+        pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * (-30.0 * u + 62.0 * sl_), 0)},
+                               f"wing_fore.{sd}": {"rot": (0, sg * (-14.0 * u + 22.0 * sl_), 0)},
+                               f"wing_hand.{sd}": {"rot": (0, sg * (-10.0 * u + 18.0 * sl_), 0)}})
+    # heaving breath while it struggles up and roars
+    br = 0.5 * (1 - math.cos(2 * math.pi * 4 * max(0.0, min(1.0, (t - 5.5) / 6.3)))) * cw2_breath_env(t)
+    pose = add_pose(pose, {"spine_1": {"scale": 1.0 + 0.05 * br}, "spine_2": {"scale": 1.0 + 0.07 * br}, "spine_3": {"scale": 1.0 - 0.065 * br}})
+    pose = add_pose(pose, {"pelvis": {"t": (0, 0, -0.72 * kn_ + 0.03 * br)}, "root": {"rot": (4.0 * kn_, 0, 0)}})
+
+    def legs(r):
+        out = {}
+        for sd in "LR":
+            tgt = Vector(r.rest_foot[sd])
+            tgt.z += 0.025 * kn_
+            out.update(r.leg_aims(sd, tgt, FWD, phi_deg=10.0 + 66.0 * kn_))
+        return out
+    return pose, legs
+
+
 def solve_v2(rig, name):
     n1 = v1_frame_count(name)
-    n2 = v2_frame_count(name)
+    n2 = v2_frame_count(name) if name != "crown_wakes" else int(round(CW2_T * FPS))
     ratio = n1 / n2
     V1_RATIO[name] = ratio
     MARKER_SCALE[name] = 1.0 / ratio
@@ -1123,6 +1306,12 @@ def solve_v2(rig, name):
                 return out
             rig.apply_pose(pose, legs)
             keys.append((f, rig.channels()))
+    elif name == "death":
+        keys = solve_floor(rig, n2, death2_pose, 4)
+    elif name == "crown_wakes":
+        V2_MARKERS[name] = CW2_MARKERS
+        MARKER_SCALE[name] = 1.0
+        keys = solve_floor(rig, n2, crown2_pose, 2)
     elif name in ATTACKS:
         spec1 = ATTACKS[name]
 
@@ -1204,8 +1393,8 @@ def write_action(rig, name, keys, loop):
             pb.keyframe_insert("rotation_quaternion", frame=f)
             pb.keyframe_insert("scale", frame=f)
     act["loop"] = loop
-    if name in ATTACKS:  # the events, as timeline markers on the action
-        for mname, mtime in attack_markers(name).items():
+    if name in ATTACKS or name in V2_MARKERS:  # the events, as timeline markers on the action
+        for mname, mtime in (V2_MARKERS[name] if name in V2_MARKERS else attack_markers(name)).items():
             mk = act.pose_markers.new(mname)
             mk.frame = int(round(mtime * MARKER_SCALE.get(name, 1.0) * FPS))
     act.frame_start, act.frame_end = 0, keys[-1][0]
@@ -1286,7 +1475,7 @@ def measure(rig, name, act, loop, ratio=1.0):
         out["effort_layer"] = rot_stats(EFFORT_POSES[name])
         if name in EFFORT_BREATHS:
             out["effort_layer"]["recovery_breaths"] = EFFORT_BREATHS[name]
-    if name in ATTACKS:
+    if name in ATTACKS or name in V2_FLOOR_CLIPS:
         out["markers"] = {m.name: {"frame": m.frame, "time_s": round(m.frame / FPS, 3),
                                    "normalised": round(m.frame / (f1 - f0), 4)} for m in act.pose_markers}
         hit = [m.frame for m in act.pose_markers if m.name == "hit"]
@@ -1346,7 +1535,7 @@ def build():
     bpy.context.scene.render.fps = FPS
     metrics = {}
     acts = {}
-    clips = V2_CLIPS if V2 else CLIP_LIST
+    clips = (V2_CLIPS + V2_CLIPS_B) if V2 else CLIP_LIST
     for name, loop in clips:
         t1 = time.time()
         rig.reach_err = 0.0
