@@ -179,7 +179,7 @@ class Rig:
         rest = self.arm.matrix_world @ b.matrix_local
         return self.arm.pose.bones["pelvis"].matrix @ rest.inverted()
 
-    def min_z(self):
+    def min_z(self, body_only=False):
         self.mod.show_viewport = True
         dg = bpy.context.evaluated_depsgraph_get()
         ev = self.obj.evaluated_get(dg)
@@ -188,7 +188,15 @@ class Rig:
         m.vertices.foreach_get("co", co)
         ev.to_mesh_clear()
         self.mod.show_viewport = False
-        return float(co[2::3].min())
+        z = co[2::3]
+        if body_only:  # everything except the three necks, heads, jaws and crowns
+            if not hasattr(self, "_body_mask"):
+                names = [g.name for g in self.obj.vertex_groups]
+                skip = ("neck_", "head_", "jaw_", "crown_")
+                self._body_mask = np.array([not names[max(v.groups, key=lambda g: g.weight).group].startswith(skip)
+                                            for v in self.obj.data.vertices])
+            z = z[self._body_mask]
+        return float(z.min())
 
     # --- two-bone leg IK onto a foot target
     def leg_aims(self, side, foot, facing, phi_deg=10.0, toe_deg=7.0):
@@ -426,8 +434,8 @@ def death_body(t, rig, neck_scale=1.0):
         amt = (70 if k == "main" else 62) * fall
         if k == "L":  # the +X neck ends up underneath: lay it forward along the floor before the roll, not beneath the body
             ahead = smooth((t - 0.7) / 0.9)
-            pose = add_pose(pose, {n: {"brot": (95 * ahead / len(chain), 0, 0)} for n in chain})
-            amt *= 0.2
+            pose = add_pose(pose, {n: {"brot": (L_FORWARD * ahead / len(chain), 0, 0)} for n in chain})
+            amt = -L_ACROSS * ahead
         pose = add_pose(pose, {n: {"brot": (0, amt / len(chain), 0)} for n in chain})
     for h in HEADS:
         pose = add_pose(pose, {h: {"brot": (0, 12 * fall, 0)}})
