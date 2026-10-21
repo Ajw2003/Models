@@ -1,0 +1,3 @@
+# Claude Code session state: live agent worktrees and hook state, not project files
+.claude/worktrees/
+.claude/house-rules-loop.json
