@@ -1,18 +1,18 @@
 # Project state
 
-**Headline: 85%.** The goose is rigged and all 13 clips are built; the animation FBX, manifest and pull request are not done yet.
+**Headline: 90%.** The goose is rigged, animated and exported; milestones 2 and 3 are done only once aj has checked the clips and merged the pull request.
 
 | Milestone | Status |
 |---|---|
 | 1. Models moved in | Done: files compared byte for byte with `cd0cef5`; `main` at `7ac237e` |
-| 2. Goose boss rig | Built, pose-tested and looked at (#2): 59 bones, `docs/art/reviews/goose-rig-review.png`; waits on aj's check in the pull request |
-| 3. Goose boss clips | All 13 built and looked at (#3, #4, #5), with markers and metrics in `art/goose/clips/metrics.json`; Flapping Charge foot slide fixed (3.889 m/s planted, 0 deviation); export, manifest and pull request (#6) next |
+| 2. Goose boss rig | Built and looked at (#2): 59 bones, `docs/art/reviews/goose-rig-review.png`; waits on aj's check in the pull request |
+| 3. Goose boss clips | All 13 built and looked at (#3 to #6); `art/goose/goose_anims.fbx` re-imports with 13 takes and 59 bones; events live in `art/goose/clips/manifest.json` because FBX drops the markers; waits on aj's check in the pull request |
 | 4. Scythe finished | Unknown: no acceptance yet |
 
 ## The one thing that is not what it looks like
 
-The goose is rigged (`art/goose/goose_rigged.blend`, 59 bones), but only one test pose has been
-checked; tail, jaws, finger bones and full wing folds have not been posed yet.
+Every clip passed its floor and loop checks and was looked at as 8 stills, but no person has watched
+the MP4s yet, and nothing checks a neck or wing passing through the body.
 
 ## Cross-cutting issues
 
