@@ -397,6 +397,7 @@ def turn_body(t):
     return add_pose(body, idle_pose(t * 0.0 + 0.0), 0.0)
 
 
+L_FORWARD, L_ACROSS = 95.0, 0.0  # how the neck that ends underneath is laid out before the roll (degrees)
 DEATH_T = 4.0
 T_BUCKLE, T_ROLL, T_NECKS = 0.35, 1.4, 2.2
 
