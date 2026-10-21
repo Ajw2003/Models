@@ -425,5 +425,124 @@
       "ToothBone": 1.15,
       "GooseBlack": 0.55
     }
-  }
+  },
+  "rig": {
+    "note": "built by art/goose/build_rig.py from the design numbers above; goose_rigged.blend",
+    "bone_count": 59,
+    "armature": "goose_rig",
+    "naming": "goose's own point of view (Blender convention): it faces -Y, so .L / _L is +X (its left) and .R / _R is -X. goose_design tags its parts the other way round; build_rig.py's BONE_SIDE table maps across.",
+    "bones": [
+      "root",
+      "pelvis",
+      "spine_1..3",
+      "tail_1..2",
+      "neck_main_1..7",
+      "head_main",
+      "jaw_main",
+      "neck_L_1..6",
+      "head_L",
+      "jaw_L",
+      "neck_R_1..6",
+      "head_R",
+      "jaw_R",
+      "crown_main",
+      "crown_L",
+      "crown_R",
+      "per side (.L/.R): wing_shoulder, wing_upper, wing_fore, wing_hand, wing_finger_1..4, leg_thigh, leg_shin, leg_tarsus, leg_toes"
+    ],
+    "weighting": "computed per part by name, not Blender bone-heat: soft parts blend neighbouring bones along their chain by arc length with a smoothstep; feathers, hackles, ribs and spines take the blend at their root vertex; teeth, beaks, jaws, tongues, eyes, crown branches, claws, toes and scutes are 100% on one bone; finger bones split at the knuckle. Weights sum to 1, at most 3 bones per vertex."
+  },
+  "clips": [
+    {
+      "name": "idle",
+      "frames": 120,
+      "seconds": 4.0,
+      "fps": 30,
+      "loop": true
+    },
+    {
+      "name": "walk",
+      "frames": 48,
+      "seconds": 1.6,
+      "fps": 30,
+      "loop": true
+    },
+    {
+      "name": "turn_in_place",
+      "frames": 45,
+      "seconds": 1.5,
+      "fps": 30,
+      "loop": false
+    },
+    {
+      "name": "stagger",
+      "frames": 36,
+      "seconds": 1.2,
+      "fps": 30,
+      "loop": false
+    },
+    {
+      "name": "death",
+      "frames": 120,
+      "seconds": 4.0,
+      "fps": 30,
+      "loop": false
+    },
+    {
+      "name": "hesitation_peck",
+      "frames": 66,
+      "seconds": 2.2,
+      "fps": 30,
+      "loop": false
+    },
+    {
+      "name": "flapping_charge",
+      "frames": 75,
+      "seconds": 2.5,
+      "fps": 30,
+      "loop": false
+    },
+    {
+      "name": "leap_and_dive",
+      "frames": 90,
+      "seconds": 3.0,
+      "fps": 30,
+      "loop": false
+    },
+    {
+      "name": "wing_gust",
+      "frames": 60,
+      "seconds": 2.0,
+      "fps": 30,
+      "loop": false
+    },
+    {
+      "name": "turning_tail_sweep",
+      "frames": 72,
+      "seconds": 2.4,
+      "fps": 30,
+      "loop": false
+    },
+    {
+      "name": "neck_lunge_grab",
+      "frames": 96,
+      "seconds": 3.2,
+      "fps": 30,
+      "loop": false
+    },
+    {
+      "name": "death_honk",
+      "frames": 78,
+      "seconds": 2.6,
+      "fps": 30,
+      "loop": false
+    },
+    {
+      "name": "crown_wakes",
+      "frames": 180,
+      "seconds": 6.0,
+      "fps": 30,
+      "loop": false
+    }
+  ]
 }

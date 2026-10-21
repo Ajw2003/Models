@@ -3,6 +3,7 @@
 
   python3.11 art/goose/goose_clips.py build            # goose_rigged.blend -> goose_animated.blend + clips/metrics.json
   python3.11 art/goose/goose_clips.py render [CLIP..]  # per clip: 8-still contact sheet + MP4 under art/goose/clips/
+  python3.11 art/goose/goose_clips.py export           # goose_anims.fbx (13 takes, no mesh), clips/manifest.json, re-import check
 
 Loads goose_rigged.blend (mesh and rig untouched) and writes goose_animated.blend with five Actions
 (fake user set), 30 fps. A pose is a dict {bone: entry} where an entry is a dict of
@@ -1134,6 +1135,7 @@ def build():
     os.makedirs(CLIPS_DIR, exist_ok=True)
     with open(os.path.join(CLIPS_DIR, "metrics.json"), "w") as f:
         json.dump(metrics, f, indent=1)
+    write_manifest(metrics)
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(HERE, "goose_animated.blend"), compress=True)
     bad = [n for n, m in metrics.items() if not m["min_z_ok"]]
     print(f"goose_clips: wrote goose_animated.blend and clips/metrics.json in {time.time() - t0:.1f} s")
@@ -1299,11 +1301,120 @@ def render(names):
         print(f"goose_clips: rendered {name}: {json.dumps(times)} total {time.time() - t0:.1f} s")
 
 
+
+# ---------------------------------------------------------------- export, manifest
+
+ENDS_IN = {"death": "dead", "crown_wakes": "phase2_stance"}
+
+
+def write_manifest(metrics):
+    """clips/manifest.json from metrics.json (so the two cannot disagree): what an engine importer reads."""
+    clips = []
+    for name, loop in CLIP_LIST:
+        m = metrics[name]
+        events = [{"name": k, "normalised_time": v["normalised"], "frame": v["frame"], "time_s": v["time_s"]}
+                  for k, v in m.get("markers", {}).items()]
+        if name == "turn_in_place":
+            motion = {"kind": "yaw", "degrees": YAW_KEYS[-1][1], "note": "root rotates about Z, 90 degrees to the right"}
+        elif name == "turning_tail_sweep":
+            motion = {"kind": "yaw", "degrees": 360.0, "note": "root rotates about Z, about 385 degrees in all from the wind-up (fast phase about 273), ends facing forward"}
+        elif name == "leap_and_dive":
+            motion = {"kind": "z", "peak_m": m["root_peak_z_m"], "note": "root rises in Z; no x or y travel"}
+        else:
+            motion = {"kind": "none"}
+        entry = {"name": name, "frames": m["frames"], "seconds": m["seconds"], "fps": FPS, "loop": bool(loop),
+                 "events": events, "ends_in": ENDS_IN.get(name, "idle"), "root_motion": motion}
+        if "implied_ground_speed_mps" in m:
+            entry["implied_ground_speed_mps"] = m["implied_ground_speed_mps"]
+        if name == "crown_wakes":
+            entry["end_pose_vs_idle_m"] = m["last_frame_vs_idle0_pose_diff_m"]
+            entry["crown_scales_last_frame"] = m["crown_scales_last_frame"]
+        clips.append(entry)
+    out = {"model": "goose_anims.fbx", "armature": "goose_rig", "fps": FPS, "bones": 59, "units": "metres, +Z up, faces -Y in Blender",
+           "note": "Event times are also stored as pose markers on the Blender actions; the FBX does not carry them, so this file is the source of truth for events.",
+           "clips": clips}
+    os.makedirs(CLIPS_DIR, exist_ok=True)
+    path = os.path.join(CLIPS_DIR, "manifest.json")
+    with open(path, "w") as f:
+        json.dump(out, f, indent=1)
+    return path
+
+
+def export_fbx():
+    """goose_anims.fbx: the armature and all 13 actions as takes, no mesh; then re-import and check it."""
+    t0 = time.time()
+    with open(os.path.join(CLIPS_DIR, "metrics.json")) as f:
+        metrics = json.load(f)
+    manifest = write_manifest(metrics)
+    bpy.ops.wm.open_mainfile(filepath=os.path.join(HERE, "goose_animated.blend"))
+    names = [n for n, _ in CLIP_LIST]
+    missing = [n for n in names if n not in bpy.data.actions]
+    if missing:
+        die(f"goose_animated.blend lacks actions {missing}; run build first")
+    arm = bpy.data.objects["goose_rig"]
+    bpy.ops.object.select_all(action="DESELECT")
+    arm.select_set(True)
+    bpy.context.view_layer.objects.active = arm
+    arm.animation_data_create()
+    arm.animation_data.action = bpy.data.actions["idle"]
+    for tr in list(arm.animation_data.nla_tracks):
+        arm.animation_data.nla_tracks.remove(tr)
+    bpy.context.scene.render.fps = FPS
+    out = os.path.join(HERE, "goose_anims.fbx")
+    bpy.ops.export_scene.fbx(filepath=out, use_selection=True, object_types={"ARMATURE"},
+                             use_armature_deform_only=True, add_leaf_bones=False,
+                             bake_anim=True, bake_anim_use_all_actions=True, bake_anim_use_nla_strips=False,
+                             bake_anim_step=1.0, bake_anim_simplify_factor=0.0, bake_anim_force_startend_keying=True,
+                             axis_forward="-Z", axis_up="Y", apply_scale_options="FBX_SCALE_UNITS", path_mode="RELATIVE")
+    size = os.path.getsize(out)
+    print(f"goose_clips: wrote {out} ({size / 1024:.0f} KiB) and {manifest}")
+
+    # re-import into a fresh scene and check every take
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    bpy.ops.import_scene.fbx(filepath=out, automatic_bone_orientation=False)
+    objs = [o.type for o in bpy.data.objects]
+    print(f"goose_clips: re-imported objects: {sorted(set(objs))} ({len(objs)} total)")
+    takes = {}
+    for act in bpy.data.actions:
+        lo, hi = act.frame_range
+        takes[act.name] = (lo, hi, len(act.pose_markers))
+    print(f"goose_clips: re-imported takes: {len(takes)}")
+    problems = []
+    short = {}
+    for full, (lo, hi, nm) in sorted(takes.items()):
+        key = full.split("|")[-1]
+        short[key] = (lo, hi, nm)
+        print(f"  {full}: frames {lo:g}..{hi:g} ({hi - lo:g} frames), pose markers {nm}")
+    if len(takes) != 13:
+        problems.append(f"{len(takes)} takes re-imported, expected 13")
+    for n in names:
+        if n not in short:
+            problems.append(f"take {n} missing after re-import")
+            continue
+        lo, hi, _ = short[n]
+        want = metrics[n]["frames"]
+        if abs((hi - lo) - want) > 1:
+            problems.append(f"take {n} is {hi - lo:g} frames, metrics.json says {want}")
+    bones = [b.name for o in bpy.data.objects if o.type == "ARMATURE" for b in o.data.bones]
+    print(f"goose_clips: re-imported bones: {len(bones)}")
+    if len(bones) != 59:
+        problems.append(f"{len(bones)} bones after re-import, expected 59")
+    survived = sum(nm for _, _, nm in short.values())
+    expect = sum(len(metrics[n].get("markers", {})) for n in names)
+    print(f"goose_clips: pose markers after re-import: {survived} of {expect} " +
+          ("(markers survived)" if survived == expect else "(FBX does not carry the markers; manifest.json is the source of truth for events)"))
+    print(f"goose_clips: export and re-import took {time.time() - t0:.1f} s")
+    if problems:
+        die("export check failed:\n  " + "\n  ".join(problems))
+
+
 def main():
-    if len(sys.argv) < 2 or sys.argv[1] not in ("build", "render"):
-        die("usage: goose_clips.py build | render [clip ...]")
+    if len(sys.argv) < 2 or sys.argv[1] not in ("build", "render", "export"):
+        die("usage: goose_clips.py build | render [clip ...] | export")
     if sys.argv[1] == "build":
         build()
+    elif sys.argv[1] == "export":
+        export_fbx()
     else:
         render(sys.argv[2:])
 

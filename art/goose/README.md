@@ -22,8 +22,15 @@ roughness); faces -Y, origin on the ground between the feet.
 | `textures/` | the baked colour, normal and roughness images (4096 px JPEG) the model reads |
 | `goose.glb` / `goose.fbx` / `goose.blend` | the model |
 | `views/` | the four review renders and `stats.json` |
+| `build_rig.py` | adds the 59-bone armature to `goose.blend`, skins it (weights computed per part, not bone-heat), runs the pose test; writes `goose_rigged.blend` |
+| `goose_rigged.blend` | the model with the rig bound; `rig_views/` holds its pose-test renders (rest three-quarter, posed three-quarter, front, side) |
+| `goose_clips.py` | the pose library and the 13 clips as Blender Actions at 30 fps, their metrics, per-clip review renders, and the FBX / manifest export |
+| `goose_animated.blend` | `goose_rigged.blend` plus the 13 actions (fake user), with "hit" / "release" / "roar" pose markers |
+| `goose_anims.fbx` | the armature and the 13 actions as takes, animation only (no mesh), 59 deform bones |
+| `clips/` | `manifest.json` (what an engine reads), `metrics.json` (measurements), and per clip `<clip>_sheet.png` (8 stills) and `<clip>.mp4` |
 
-Review sheet: `docs/art/reviews/goose-review.png`; recorded verdicts beside it.
+Review sheets: `docs/art/reviews/goose-review.png` (the model), `goose-rig-review.png` (the rig pose test) and
+`goose-clips-review.png` (all 13 clip sheets stacked); recorded verdicts beside them.
 
 Rebuild and re-review, from the repo root (needs `python3.11` with `bpy`, from
 `claude-art-pipeline/plugins/art-pipeline/skills/art-pipeline/scripts/setup_bpy.sh`):
@@ -40,6 +47,22 @@ The full build takes about 10 minutes on this cloud sandbox's 4 CPU cores (Cycle
 
 `build_goose.py` refuses to export if the model is over budget, more than 0.15 m off the spec
 height, below the ground, has a part that is not a closed shell, or loses a material.
+
+Rig, clips and export, from the repo root (same `python3.11` with `bpy`, plus `ffmpeg` and Pillow for the
+review renders). Measured on this cloud sandbox's 4 CPU cores:
+
+```bash
+python3.11 art/goose/build_rig.py                      # goose.blend -> goose_rigged.blend, about 5 s
+python3.11 art/goose/build_rig.py --pose-test POSED.blend   # pose test, about 1 s (then render it with render_views.py)
+python3.11 art/goose/goose_clips.py build              # 13 actions -> goose_animated.blend, clips/metrics.json, manifest.json, about 140 s
+GOOSE_CLIPS_TMP=/path/to/scratch python3.11 art/goose/goose_clips.py render [clip ...]   # sheets and MP4s
+python3.11 art/goose/goose_clips.py export             # goose_anims.fbx, manifest.json, re-import check, about 9 s
+```
+
+`render` takes about 60 s for a clip's 8 stills (600 px, 16 samples) and 70 to 340 s for its MP4 (480 px, 8
+samples, 15 fps; longest is crown_wakes at 343 s), so all 13 clips take roughly 48 minutes. `export` fails unless
+exactly 13 takes come back from a re-import with lengths within a frame of `metrics.json` and 59 bones. FBX does
+not carry pose markers (the re-import shows 0 of 9), so `clips/manifest.json` is the source of truth for events.
 
 What the review passes changed: pass 1 had barcode-like flank bars, washed-out and over-crowded
 eyes, tentacles standing straight like extra legs, a needle of a tail and square feather tips;
@@ -62,4 +85,19 @@ concept sheet's tones (measured breast 82 vs the concept's 102, up from 64).
 
 Known gaps: the lit render is still a little lighter on the black necks (31 vs 18) and darker on the
 breast (82 vs 102) than the concept's flat colours; the brand and blood are baked at 4096 px over the
-whole model, so they soften up close; no rig, no animation clips, not yet imported into an engine.
+whole model, so they soften up close; it is not yet imported into an engine.
+
+What now exists: the 59-bone rig, 13 clips (idle, walk, turn_in_place, stagger, death, hesitation_peck,
+flapping_charge, leap_and_dive, wing_gust, turning_tail_sweep, neck_lunge_grab, death_honk, crown_wakes),
+`goose_anims.fbx` and `clips/manifest.json`. Honest flaws in the clips and rig:
+
+- There is no body-collision check: necks, wings and legs can pass through the body, and I only looked at the
+  stills. Only the floor is checked (every frame, full mesh, lowest vertex at or above -0.01 m).
+- The tail sweep in `turning_tail_sweep` looks modest in the stills.
+- The walk's body roll is small, so the waddle is subtle.
+- In `death`, the crowns prop the heads a little off the floor.
+- The review stills are low-sample (16 samples, 600 px) and the MP4s are 480 px at 8 samples; no person has watched
+  the MP4s yet.
+- Planted feet slide at the implied ground speed (the root never moves), which `metrics.json` measures; it is
+  not a slide-free foot lock. The walk has one edge frame about 0.13 m/s off that speed.
+- `crown_wakes` and `death` end in different poses from idle by design; there is no phase-two idle.
