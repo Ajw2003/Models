@@ -86,7 +86,7 @@ def add_pose(a, b, w=1.0):
     out = {k: dict(v) for k, v in a.items()}
     for bone, e in b.items():
         o = out.setdefault(bone, {})
-        for key in ("rot", "t"):
+        for key in ("rot", "t", "brot"):
             if key in e:
                 cur = o.get(key, (0.0, 0.0, 0.0))
                 o[key] = tuple(c + w * x for c, x in zip(cur, e[key]))
@@ -410,19 +410,19 @@ def death_body(t, rig):
     fold = smooth((t - 0.9) / 1.2)
     for s in "LR":
         sg = side_sign(s)
-        pose = add_pose(pose, {f"wing_shoulder.{s}": {"rot": (0, sg * 25 * fold, sg * 80 * fold)},
-                               f"wing_upper.{s}": {"rot": (0, 0, sg * 10 * fold)},
-                               f"wing_fore.{s}": {"rot": (0, 0, sg * 40 * fold)},
-                               f"wing_hand.{s}": {"rot": (0, 0, sg * 70 * fold)}})
+        pose = add_pose(pose, {f"wing_shoulder.{s}": {"brot": (0, sg * 25 * fold, sg * 80 * fold)},
+                               f"wing_upper.{s}": {"brot": (0, 0, sg * 10 * fold)},
+                               f"wing_fore.{s}": {"brot": (0, 0, sg * 40 * fold)},
+                               f"wing_hand.{s}": {"brot": (0, 0, sg * 70 * fold)}})
     # necks fall last: bend toward the floor (world Y once it lies on its side)
     fall = pchip([(0, 0), (T_NECKS, 0), (2.9, 0.75), (3.4, 1.05), (3.8, 1.0), (4.0, 1.0)], t)
     for k, chain in NECKS.items():
         amt = (70 if k == "main" else 62) * fall
-        pose = add_pose(pose, neck_pose(chain, y=amt))
+        pose = add_pose(pose, {n: {"brot": (0, amt / len(chain), 0)} for n in chain})
     for h in HEADS:
-        pose = add_pose(pose, {h: {"rot": (0, 12 * fall, 0)}})
+        pose = add_pose(pose, {h: {"brot": (0, 12 * fall, 0)}})
     for j in JAWS:
-        pose = add_pose(pose, {j: {"rot": (14 * fall, 0, 0)}})
+        pose = add_pose(pose, {j: {"brot": (14 * fall, 0, 0)}})
     return pose
 
 
@@ -635,10 +635,13 @@ def build():
 BG = "#EDE6D6"
 
 
-def setup_scene(res, samples):
+CAM_TARGET = {"death": (2.0, 0.3, 2.2)}  # the goose falls toward +X
+
+
+def setup_scene(res, samples, target=(0, 0.3, 3.0)):
     from PIL import Image  # noqa: F401  (fail early if Pillow is missing)
     sc = bpy.context.scene
-    for o in [o for o in bpy.data.objects if o.type in ("CAMERA", "LIGHT")]:
+    for o in [o for o in bpy.data.objects if o.type in ("CAMERA", "LIGHT") or o.name.startswith("Ground")]:
         bpy.data.objects.remove(o)
     sc.render.engine = "CYCLES"
     sc.cycles.device = "CPU"
@@ -679,7 +682,7 @@ def setup_scene(res, samples):
     cam.data.clip_start, cam.data.clip_end = 0.01, 400
     yaw, pitch = math.radians(-35), math.radians(16)
     toward = Vector((math.sin(yaw) * math.cos(pitch), -math.cos(yaw) * math.cos(pitch), math.sin(pitch)))
-    target = Vector((0, 0.3, 3.0))
+    target = Vector(target)
     cam.location = target + toward * 60
     cam.rotation_euler = (-toward).to_track_quat("-Z", "Y").to_euler()
     cam.data.ortho_scale = 11.0
@@ -707,7 +710,7 @@ def render_clip(rig, name, tmp):
     frames = [int(round(x)) for x in np.linspace(0, n, 8, endpoint=not loop)]
     times = {}
     # --- stills
-    setup_scene(600, 16)
+    setup_scene(600, 16, CAM_TARGET.get(name, (0, 0.3, 3.0)))
     t0 = time.time()
     tiles = []
     for f in frames:
@@ -735,7 +738,7 @@ def render_clip(rig, name, tmp):
         rig.arm.animation_data.action = None
         return times
     # --- mp4: every second frame at 15 fps, 480 px, 8 samples
-    setup_scene(480, 8)
+    setup_scene(480, 8, CAM_TARGET.get(name, (0, 0.3, 3.0)))
     t0 = time.time()
     seq = os.path.join(tmp, f"{name}_seq")
     os.makedirs(seq, exist_ok=True)
