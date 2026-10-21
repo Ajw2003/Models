@@ -549,8 +549,9 @@ def curve(*pts):
 
 
 def envelope(*pts):
-    """Like curve, but never below zero (the smooth curve can dip under flat starts, and an envelope must not)."""
-    return lambda t: max(0.0, pchip(list(pts), t))
+    """Like curve, but held inside 0..1: the smooth curve overshoots flat plateaus (it once scaled the charge's
+    stride by 1.19 and so made the planted feet slide 15% too fast), and an envelope must not."""
+    return lambda t: min(1.0, max(0.0, pchip(list(pts), t)))
 
 
 def trio(pose, chain_main, chain_l, chain_r, main, side, head_main=0.0, head_side=0.0):
