@@ -3,6 +3,20 @@
 The running log of what was decided in this repo, when and why. Newest entry at the top. Entries
 are never rewritten; a later decision flips an old entry's Status to Superseded with a pointer.
 
+## 2026-10-21 — Goose animation version 2 build plan approved
+
+**Context.** The version 2 design became a build plan of five issues under #8 (Goose animation
+version 2): #9 the v2 rig and version switch, #10 the slower clips, #11 death and The Crown Wakes,
+#12 stun and hits, #13 export, side-by-side videos and the pull request update.
+
+**Decision.** aj approved it ("Build plan approved: goose animation v2 1A 2A 3A 4A 5A 6*"). The work
+runs in that order on `AjsAgent/import-models` and lands on pull request #7 beside version 1.
+
+**Why.** The tongue bones and the version switch come first because every version 2 clip is built on
+them, and the switch is what keeps version 1's files from being rebuilt.
+
+**Status.** Standing.
+
 ## 2026-10-21 — Goose animation version 2: slower, forward death, longer transition, stun and hits
 
 **Context.** aj checked the 13 version 1 clips in pull request #7 and asked for five changes, keeping
