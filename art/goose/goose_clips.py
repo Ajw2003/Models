@@ -423,6 +423,10 @@ def death_body(t, rig, neck_scale=1.0):
     fall = pchip([(0, 0), (T_NECKS, 0), (2.9, 0.75), (3.4, 1.05), (3.8, 1.0), (4.0, 1.0)], t) * neck_scale
     for k, chain in NECKS.items():
         amt = (70 if k == "main" else 62) * fall
+        if k == "L":  # the +X neck ends up underneath: lay it forward along the floor before the roll, not beneath the body
+            ahead = smooth((t - 0.7) / 0.9)
+            pose = add_pose(pose, {n: {"brot": (95 * ahead / len(chain), 0, 0)} for n in chain})
+            amt *= 0.2
         pose = add_pose(pose, {n: {"brot": (0, amt / len(chain), 0)} for n in chain})
     for h in HEADS:
         pose = add_pose(pose, {h: {"brot": (0, 12 * fall, 0)}})
