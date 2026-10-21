@@ -5,6 +5,14 @@
   python3.11 art/goose/build_rig.py --pose-test POSED.blend           # pose goose_rigged.blend, check, save a copy
 
 Opens goose.blend (never modified), adds the armature, skins the mesh and saves goose_rigged.blend.
+
+Version 2 (--v2): the same 59 bones plus three bones per tongue (tongue_main_1..3, tongue_L_1..3,
+tongue_R_1..3, parented to the head's jaw), 68 in all, with the tongue skinned softly along them and its
+spikes rigid on their nearest tongue bone; written to goose_rigged_v2.blend. Version 1's files are never touched:
+
+  python3.11 art/goose/build_rig.py --v2                              # goose.blend -> goose_rigged_v2.blend
+  python3.11 art/goose/build_rig.py --v2 --pose-test POSED.blend      # jaws wide, tongues lolled out and down
+  python3.11 art/goose/build_rig.py --v2 --closeup POSED.blend DIR    # close-up renders of the three heads
 Bone joints come from spec.json through goose_design (neck control paths, wing and leg joints, head
 bases and directions, tail root, the crown branch roots read off the built parts), so a rebuilt mesh
 gives a rebuilt rig.
@@ -44,7 +52,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import goose_design as g  # noqa: E402
 
-BONE_COUNT = 59
+V2 = "--v2" in sys.argv
+BONE_COUNT = 59  # version 1; version 2 adds three tongue bones per head that has a tongue in spec.json
+TONGUE_BONES = 3
+OUT_NAME = "goose_rigged_v2.blend" if V2 else "goose_rigged.blend"
 FLOOR_TOLERANCE_M = 0.01
 GROUND_TOE_Z = 0.045  # goose_design's toe tip height
 # goose_design's side tag -> bone side. Design "R" is +X, which is the goose's LEFT (it faces -Y).
@@ -186,7 +197,7 @@ def build_skeleton(spec, parts):
     bone("tail_2", t1, t2, "tail_1")
     chains["tail"] = Chain(["tail_1", "tail_2"], [t0, t1, t2], "pelvis", spine_point(rings, 1.0))
 
-    def neck_chain(key, nbones, path, hd, label, crown_prefix):
+    def neck_chain(key, nbones, path, hd, label, crown_prefix, tongue=False):
         pts = resample(path, nbones)
         names = [f"neck_{label}_{i + 1}" for i in range(nbones)]
         for i, n in enumerate(names):
@@ -198,11 +209,21 @@ def build_skeleton(spec, parts):
         bone(crown_n, root, root + hd["u"] * 0.3 * hd["s"], head_n)
         chains[key] = Chain(names + [head_n], pts + [hd["head_tail"]], "spine_3", spine_point(rings, -0.55),
                             anchor_h=0.2)
+        if V2 and tongue:  # three bones along the tongue's own path, hanging off the jaw
+            path_t = np.array(by_name[f"{crown_prefix}_tongue"]["sweep"]["path"])
+            cum = np.concatenate([[0], np.cumsum(np.linalg.norm(np.diff(path_t, axis=0), axis=1))])
+            tp = [np.array([np.interp(f * cum[-1], cum, path_t[:, c]) for c in range(3)]) for f in np.linspace(0, 1, TONGUE_BONES + 1)]
+            tn = [f"tongue_{label}_{i + 1}" for i in range(TONGUE_BONES)]
+            for i, n in enumerate(tn):
+                bone(n, tp[i], tp[i + 1], jaw_n if i == 0 else tn[i - 1])
+            chains[f"tongue_{label}"] = Chain(tn, tp, jaw_n, tp[0] - (tp[1] - tp[0]), hfrac=0.5, anchor_h=0.05)
 
-    neck_chain("neck_main", 7, D["main_neck"]["path"], head_geometry(D["main_head"], False), "main", "main")
+    neck_chain("neck_main", 7, D["main_neck"]["path"], head_geometry(D["main_head"], False), "main", "main",
+               tongue=bool(D["main_head"].get("tongue")))
     for sign, tag in ((1, "R"), (-1, "L")):
         path = [p if sign > 0 else g.mirror(p) for p in D["side_neck"]["path"]]
-        neck_chain(f"neck_{tag}", 6, path, head_geometry(D["side_head"], sign < 0), bs(tag), f"side_{tag}")
+        neck_chain(f"neck_{tag}", 6, path, head_geometry(D["side_head"], sign < 0), bs(tag), f"side_{tag}",
+                   tongue=bool(D["side_head"].get("tongue")))
 
     for sign, tag in ((1, "R"), (-1, "L")):
         b = bs(tag)
@@ -244,6 +265,10 @@ def classify(name):
         chain = "neck_main" if p == "main" else f"neck_{p[-1]}"
         if rest == "head":
             return ("soft", chain)
+        if V2 and rest == "tongue":
+            return ("soft", f"tongue_{label}")
+        if V2 and re.fullmatch(r"tongue_spike\d+_-?\d+", rest):
+            return ("nearest", f"tongue_{label}")
         if re.fullmatch(r"(brow_[RL]|eye_[RL]|upper_beak|upper_tooth\d+_-?\d+|cheek_split_[RL]|"
                         r"cheek_tooth\d+_[RL]_-?\d+|mouth)", rest):
             return ("bone", f"head_{label}")
@@ -297,7 +322,7 @@ def chain_id(bone_name):
         return "axial"
     if bone_name.startswith("tail_"):
         return "tail"
-    m = re.fullmatch(r"(?:neck_(main|R|L)_\d+|head_(main|R|L)|jaw_(main|R|L)|crown_(main|R|L))", bone_name)
+    m = re.fullmatch(r"(?:neck_(main|R|L)_\d+|head_(main|R|L)|jaw_(main|R|L)|crown_(main|R|L)|tongue_(main|R|L)_\d+)", bone_name)
     if m:
         return "neck_" + next(x for x in m.groups() if x)
     m = re.fullmatch(r"wing_\w+\.([RL])", bone_name)
@@ -324,7 +349,7 @@ def compute_weights(parts, bones, chains, nverts):
     if len(scratch.verts) != nverts:
         die(f"design meshes to {len(scratch.verts)} vertices but goose.blend has {nverts}: rebuild goose.blend first")
     P_all = np.array(scratch.verts, dtype=float)
-    stats = {"soft": 0, "root": 0, "bone": 0, "fingers": 0}
+    stats = {"soft": 0, "root": 0, "bone": 0, "fingers": 0, "nearest": 0}
     for part, a, b in ranges:
         P = P_all[a:b]
         how = classify(part["name"])
@@ -339,6 +364,14 @@ def compute_weights(parts, bones, chains, nverts):
         elif kind == "soft":
             for n, w in chains[how[1]].weights(P).items():
                 W[a:b, col[n]] = w
+        elif kind == "nearest":  # rigid on the nearest bone of the chain (the tongue spikes)
+            ch = chains[how[1]]
+            _, d = project(P, ch.pts)
+            root = P[int(np.argmin(d))][None, :]
+            sroot, _ = project(root, ch.pts)
+            i = int(np.searchsorted(ch.cum, sroot[0], side="right")) - 1
+            bone_name = ch.names[min(max(i, 1), len(ch.names) - 1)]  # index 0 is the anchor, not a tongue bone
+            W[a:b, col[bone_name]] = 1.0
         elif kind == "root":
             ch = chains[how[1]]
             _, d = project(P, ch.pts)
@@ -420,8 +453,9 @@ def build():
         die(f"goose.blend has no object '{spec['slug']}'")
     parts = g.build_parts(spec)
     bones, chains = build_skeleton(spec, parts)
-    if len(bones) != BONE_COUNT:
-        die(f"{len(bones)} bones built, expected {BONE_COUNT}")
+    expected = BONE_COUNT + (TONGUE_BONES * sum(1 for h in ("main_head", "side_head", "side_head") if spec["design"][h].get("tongue")) if V2 else 0)
+    if len(bones) != expected:
+        die(f"{len(bones)} bones built, expected {expected}")
     print(f"build_rig: {len(bones)} bones")
     mesh = obj.data
     nv = len(mesh.vertices)
@@ -445,7 +479,7 @@ def build():
     print(f"build_rig: weight check: {nv} vertices, sums to 1 (worst read-back error {worst_sum:.2e}), "
           f"max {infl} influences, cross-chain weight on {ncross} vertices ({frac:.2%}, "
           f"max {maxcross:.2f}, within {worst:.2f} m of the other chain)")
-    out = os.path.join(HERE, "goose_rigged.blend")
+    out = os.path.join(HERE, OUT_NAME)
     bpy.ops.wm.save_as_mainfile(filepath=out, compress=True)
     print(f"build_rig: wrote {out} in {time.time() - t0:.1f} s")
 
@@ -496,8 +530,108 @@ def pose_test(out_path):
     print(f"pose_test: saved {out_path} in {time.time() - t0:.1f} s")
 
 
+def pose_test_v2(out_path):
+    """Jaws wide open and the tongues lolled out and down over the lower beaks."""
+    t0 = time.time()
+    src = os.path.join(HERE, "goose_rigged_v2.blend")
+    if not os.path.isfile(src):
+        die(f"{src} not found; run build_rig.py --v2 first")
+    bpy.ops.wm.open_mainfile(filepath=src)
+    arm = bpy.data.objects["goose_rig"]
+    obj = bpy.data.objects[g.load_spec()["slug"]]
+    names = [b.name for b in arm.data.bones]
+    if len(names) != 68:
+        die(f"{len(names)} bones in goose_rigged_v2.blend, expected 68")
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode="POSE")
+    for pb in arm.pose.bones:
+        pb.rotation_mode = "QUATERNION"
+    # heads tipped up a little so the open mouths show, jaws wide, tongues drooping over the lower beak
+    for lab in ("main", "L", "R"):
+        rot_world(arm, [f"head_{lab}"], "X", -14)
+        rot_world(arm, [f"jaw_{lab}"], "X", 38)
+        rot_world(arm, [f"tongue_{lab}_{i}" for i in (1, 2, 3)], "X", 34)
+    bpy.context.view_layer.update()
+    ev = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    m = ev.to_mesh()
+    co = np.array([v.co[:] for v in m.vertices])
+    ev.to_mesh_clear()
+    zmin = float(co[:, 2].min())
+    print(f"pose_test_v2: evaluated {len(co)} vertices, min z {zmin:.4f} m, max z {co[:, 2].max():.3f} m")
+    if zmin < -FLOOR_TOLERANCE_M:
+        die(f"posed mesh goes below the floor: min z {zmin:.4f} m")
+    bpy.ops.object.mode_set(mode="OBJECT")
+    bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(out_path), compress=True)
+    print(f"pose_test_v2: saved {out_path} in {time.time() - t0:.1f} s")
+
+
+def closeups(posed, outdir):
+    """Close-up renders of the three heads from the side and three-quarter (render_views.py frames the whole goose)."""
+    from PIL import Image
+    bpy.ops.wm.open_mainfile(filepath=os.path.abspath(posed))
+    arm = bpy.data.objects["goose_rig"]
+    sc = bpy.context.scene
+    for o in [o for o in bpy.data.objects if o.type in ("CAMERA", "LIGHT")]:
+        bpy.data.objects.remove(o)
+    sc.render.engine = "CYCLES"
+    sc.cycles.device = "CPU"
+    sc.cycles.samples = 24
+    sc.cycles.use_denoising = True
+    sc.render.resolution_x = sc.render.resolution_y = 700
+    sc.view_settings.view_transform = "AgX"
+    sc.render.film_transparent = True
+    w = bpy.data.worlds.new("W")
+    sc.world = w
+    w.use_nodes = True
+    w.node_tree.nodes["Background"].inputs["Color"].default_value = (0.03, 0.022, 0.015, 1)
+    os.makedirs(outdir, exist_ok=True)
+    arm.update_tag()
+    bpy.context.view_layer.update()
+    for lab in ("main", "L", "R"):
+        head = arm.pose.bones[f"head_{lab}"].head.copy()
+        jaw = arm.pose.bones[f"jaw_{lab}"]
+        centre = (head + jaw.tail) / 2
+        for view, yaw in (("side", 90.0), ("threequarter", -40.0)):
+            for o in [o for o in bpy.data.objects if o.type in ("CAMERA", "LIGHT")]:
+                bpy.data.objects.remove(o)
+            yawr, pit = math.radians(yaw), math.radians(12)
+            toward = Vector((math.sin(yawr) * math.cos(pit), -math.cos(yawr) * math.cos(pit), math.sin(pit)))
+            cam = bpy.data.objects.new("Cam", bpy.data.cameras.new("Cam"))
+            cam.data.type = "ORTHO"
+            cam.data.ortho_scale = 1.6
+            cam.data.clip_start, cam.data.clip_end = 0.01, 200
+            cam.location = centre + toward * 20
+            cam.rotation_euler = (-toward).to_track_quat("-Z", "Y").to_euler()
+            sc.collection.objects.link(cam)
+            sc.camera = cam
+            for nm, pos, en in (("Key", (0.8, -1.0, 0.9), 1500.0), ("Fill", (-1.0, -0.6, 0.3), 400.0)):
+                ld = bpy.data.lights.new(nm, "AREA")
+                ld.energy, ld.size = en, 6.0
+                lo = bpy.data.objects.new(nm, ld)
+                lo.location = centre + Vector(pos) * 8
+                lo.rotation_euler = (centre - lo.location).to_track_quat("-Z", "Y").to_euler()
+                sc.collection.objects.link(lo)
+            path = os.path.join(outdir, f"closeup_{lab}_{view}.png")
+            sc.render.filepath = path
+            bpy.ops.render.render(write_still=True)
+            flat = Image.new("RGBA", (700, 700), (0xED, 0xE6, 0xD6, 255))
+            Image.alpha_composite(flat, Image.open(path).convert("RGBA")).convert("RGB").save(path)
+            bpy.data.objects.remove(cam)
+    print(f"closeups: wrote 6 renders to {outdir}")
+
+
 def main():
-    if "--pose-test" in sys.argv:
+    if "--closeup" in sys.argv:
+        i = sys.argv.index("--closeup")
+        if i + 2 >= len(sys.argv):
+            die("--closeup needs POSED.blend and an output folder")
+        closeups(sys.argv[i + 1], sys.argv[i + 2])
+    elif V2 and "--pose-test" in sys.argv:
+        i = sys.argv.index("--pose-test")
+        if i + 1 >= len(sys.argv):
+            die("--pose-test needs an output .blend path")
+        pose_test_v2(sys.argv[i + 1])
+    elif "--pose-test" in sys.argv:
         i = sys.argv.index("--pose-test")
         if i + 1 >= len(sys.argv):
             die("--pose-test needs an output .blend path")

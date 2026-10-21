@@ -3,6 +3,8 @@
 
   python3.11 art/goose/goose_clips.py build            # goose_rigged.blend -> goose_animated.blend + clips/metrics.json
   python3.11 art/goose/goose_clips.py render [CLIP..]  # per clip: 8-still contact sheet + MP4 under art/goose/clips/
+  python3.11 art/goose/goose_clips.py --v2 ...         # same commands on goose_rigged_v2.blend -> goose_animated_v2.blend,
+                                                       # goose_anims_v2.fbx, clips_v2/ (version 1 files are never touched)
   python3.11 art/goose/goose_clips.py export           # goose_anims.fbx (13 takes, no mesh), clips/manifest.json, re-import check
 
 Loads goose_rigged.blend (mesh and rig untouched) and writes goose_animated.blend with five Actions
@@ -35,7 +37,15 @@ except ImportError:
     sys.exit("goose_clips.py: cannot import bpy/numpy; run it with the interpreter from setup_bpy.sh")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CLIPS_DIR = os.path.join(HERE, "clips")
+# Version switch. With no flag everything is exactly as in version 1. With --v2 every input and output moves to
+# its _v2 name (goose_rigged_v2.blend in; goose_animated_v2.blend, goose_anims_v2.fbx and clips_v2/ out), so a
+# version 1 file can never be rebuilt or overwritten by a version 2 run.
+V2 = "--v2" in sys.argv
+ARGS = [a for a in sys.argv[1:] if a != "--v2"]
+SUFFIX = "_v2" if V2 else ""
+CLIPS_DIR = os.path.join(HERE, "clips_v2" if V2 else "clips")
+RIGGED, ANIMATED, FBX = f"goose_rigged{SUFFIX}.blend", f"goose_animated{SUFFIX}.blend", f"goose_anims{SUFFIX}.fbx"
+BONES_EXPECTED = 68 if V2 else 59
 FPS = 30
 FLOOR_TOL = 0.01
 UP = Vector((0, 0, 1))
@@ -1113,7 +1123,7 @@ def measure(rig, name, act, loop):
 
 def build():
     t0 = time.time()
-    rig = Rig(os.path.join(HERE, "goose_rigged.blend"))
+    rig = Rig(os.path.join(HERE, RIGGED))
     bpy.context.scene.render.fps = FPS
     metrics = {}
     acts = {}
@@ -1136,9 +1146,9 @@ def build():
     with open(os.path.join(CLIPS_DIR, "metrics.json"), "w") as f:
         json.dump(metrics, f, indent=1)
     write_manifest(metrics)
-    bpy.ops.wm.save_as_mainfile(filepath=os.path.join(HERE, "goose_animated.blend"), compress=True)
+    bpy.ops.wm.save_as_mainfile(filepath=os.path.join(HERE, ANIMATED), compress=True)
     bad = [n for n, m in metrics.items() if not m["min_z_ok"]]
-    print(f"goose_clips: wrote goose_animated.blend and clips/metrics.json in {time.time() - t0:.1f} s")
+    print(f"goose_clips: wrote {ANIMATED} and {os.path.basename(CLIPS_DIR)}/metrics.json in {time.time() - t0:.1f} s")
     if bad:
         die(f"clips go below the floor: {bad}")
 
@@ -1285,7 +1295,7 @@ def render(names):
         die("set GOOSE_CLIPS_TMP to a scratch directory for the intermediate frames")
     os.makedirs(tmp, exist_ok=True)
     os.makedirs(CLIPS_DIR, exist_ok=True)
-    bpy.ops.wm.open_mainfile(filepath=os.path.join(HERE, "goose_animated.blend"))
+    bpy.ops.wm.open_mainfile(filepath=os.path.join(HERE, ANIMATED))
     arm = bpy.data.objects["goose_rig"]
     bpy.context.view_layer.objects.active = arm
 
@@ -1330,7 +1340,7 @@ def write_manifest(metrics):
             entry["end_pose_vs_idle_m"] = m["last_frame_vs_idle0_pose_diff_m"]
             entry["crown_scales_last_frame"] = m["crown_scales_last_frame"]
         clips.append(entry)
-    out = {"model": "goose_anims.fbx", "armature": "goose_rig", "fps": FPS, "bones": 59, "units": "metres, +Z up, faces -Y in Blender",
+    out = {"model": FBX, "armature": "goose_rig", "fps": FPS, "bones": BONES_EXPECTED, "units": "metres, +Z up, faces -Y in Blender",
            "note": "Event times are also stored as pose markers on the Blender actions; the FBX does not carry them, so this file is the source of truth for events.",
            "clips": clips}
     os.makedirs(CLIPS_DIR, exist_ok=True)
@@ -1346,11 +1356,11 @@ def export_fbx():
     with open(os.path.join(CLIPS_DIR, "metrics.json")) as f:
         metrics = json.load(f)
     manifest = write_manifest(metrics)
-    bpy.ops.wm.open_mainfile(filepath=os.path.join(HERE, "goose_animated.blend"))
+    bpy.ops.wm.open_mainfile(filepath=os.path.join(HERE, ANIMATED))
     names = [n for n, _ in CLIP_LIST]
     missing = [n for n in names if n not in bpy.data.actions]
     if missing:
-        die(f"goose_animated.blend lacks actions {missing}; run build first")
+        die(f"{ANIMATED} lacks actions {missing}; run build first")
     arm = bpy.data.objects["goose_rig"]
     bpy.ops.object.select_all(action="DESELECT")
     arm.select_set(True)
@@ -1360,7 +1370,7 @@ def export_fbx():
     for tr in list(arm.animation_data.nla_tracks):
         arm.animation_data.nla_tracks.remove(tr)
     bpy.context.scene.render.fps = FPS
-    out = os.path.join(HERE, "goose_anims.fbx")
+    out = os.path.join(HERE, FBX)
     bpy.ops.export_scene.fbx(filepath=out, use_selection=True, object_types={"ARMATURE"},
                              use_armature_deform_only=True, add_leaf_bones=False,
                              bake_anim=True, bake_anim_use_all_actions=True, bake_anim_use_nla_strips=False,
@@ -1397,8 +1407,8 @@ def export_fbx():
             problems.append(f"take {n} is {hi - lo:g} frames, metrics.json says {want}")
     bones = [b.name for o in bpy.data.objects if o.type == "ARMATURE" for b in o.data.bones]
     print(f"goose_clips: re-imported bones: {len(bones)}")
-    if len(bones) != 59:
-        problems.append(f"{len(bones)} bones after re-import, expected 59")
+    if len(bones) != BONES_EXPECTED:
+        problems.append(f"{len(bones)} bones after re-import, expected {BONES_EXPECTED}")
     survived = sum(nm for _, _, nm in short.values())
     expect = sum(len(metrics[n].get("markers", {})) for n in names)
     print(f"goose_clips: pose markers after re-import: {survived} of {expect} " +
@@ -1409,14 +1419,16 @@ def export_fbx():
 
 
 def main():
-    if len(sys.argv) < 2 or sys.argv[1] not in ("build", "render", "export"):
-        die("usage: goose_clips.py build | render [clip ...] | export")
-    if sys.argv[1] == "build":
+    if not ARGS or ARGS[0] not in ("build", "render", "export"):
+        die("usage: goose_clips.py [--v2] build | render [clip ...] | export")
+    if V2:
+        die("version 2: the rig and the paths are switched, but no version 2 clips exist yet (issues #10 onward), so there is nothing to build")
+    if ARGS[0] == "build":
         build()
-    elif sys.argv[1] == "export":
+    elif ARGS[0] == "export":
         export_fbx()
     else:
-        render(sys.argv[2:])
+        render(ARGS[1:])
 
 
 main()
