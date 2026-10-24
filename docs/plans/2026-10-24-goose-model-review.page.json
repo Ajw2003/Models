@@ -1,0 +1,62 @@
+{
+  "title": "Goose Model Review",
+  "eyebrow": "Design review for approval · the goose boss model and textures · nothing changed yet",
+  "approval": "Design approved: goose model review",
+  "short": {
+    "lead": "You asked for a senior game designer's critique of the goose boss model, its textures and how they blend, and said the parts look like separate models rather than one living beast. I rendered close-ups of every join and counted the mesh. It is 1,071 separate closed pieces: the body is one smooth egg, and each neck, wing and leg is its own tube pushed into it with nothing joining them. The colour also changes in hard blocks at each join. Below are seven recommendations, then seven choices.",
+    "hint": "Tap a step to see what it changes and why.",
+    "key": [["Recommendation", ""], ["Needs you first", "you"]],
+    "items": [
+      ["eye", "Joins", "Fuse the soft body into one skin", "", "A living creature has no seams: skin and muscle flow from the chest up into the neck and out into the wing and leg. Today each neck meets the body as a cylinder stuck into an egg, with a hard circular line and a dark ring where the shading pools. I recommend merging the soft parts (body, necks, wing arms, thighs and tail) into a single surface, with each join smoothed into a wide, muscular curve, so the body flows into the neck instead of meeting it at an edge. The hard details that really are separate things (teeth, ribs, claws, crowns, feathers) stay separate pieces.", "Your choice on the first question under Choices.", {"src": "../art/reviews/goose-joins/neck_base_front.png", "alt": "Close-up of three black neck tubes entering a pale egg-shaped body", "caption": "Today: three tubes pushed into an egg, with a dark ring at each join."}],
+      ["bulb", "Neck root", "One massive neck root that forks into three", "", "Three necks growing separately from the breast read as three animals sharing a body. A single thick, muscular base rising out of the chest that splits into three necks partway up reads as one monstrous creature, the way a hydra is drawn. It also gives the eye one strong line from the feet to the heads, which makes the silhouette easier to read at a distance in a fight.", "Your choice on the second question."],
+      ["bulb", "Colour flow", "Let colour and pattern flow across the joins", "", "Each part is painted one solid colour, so the eye sees where one part ends. The black neck should fade down into the brown breast over a metre, the way a real Canada goose's black neck meets its pale breast on one continuous surface, and the feather pattern should run across the join without breaking. The textures are repainted across the fused skin (re-baked) so nothing lines up with an old seam.", "Your choice on the third question.", {"src": "../art/reviews/goose-joins/side_neck_join.png", "alt": "Close-up of a side neck where black meets pale body in a hard line", "caption": "Today: a hard black-to-pale line where each neck meets the body."}],
+      ["list", "Feathers", "Hang ragged feathers over every join", "", "Bosses in the genre hide joints under fur, feathers or cloth that move as the creature moves, which both covers the seam and adds life. Matted neck feathers (hackles) hanging down over the neck root, short overlapping feathers (coverts) over each wing shoulder, and ragged feathered thighs over the hips would bridge the parts even before the skin is fused.", "Part of your choice on the fourth question."],
+      ["hammer", "Form", "Give the body muscle, sag and ribs under the skin", "", "The body is a smooth egg with a fine, even pattern, so it reads as a shell rather than flesh. The body needs shoulder and breast muscle where the neck and wings attach, a sagging belly, and skin folds at the neck root. The ribs should push up under stretched, torn skin instead of sitting on top like bars. Together these would make it read as an emaciated, living animal.", "Part of your choice on the fourth question.", {"src": "../art/reviews/goose-joins/wing_root.png", "alt": "Close-up of the wing root and ribs on the flank", "caption": "Today: ribs sit on top of the body like bars; the wing has no shoulder mass."}],
+      ["eye", "Legs", "Give the legs thighs and continuous scales", "", "Each leg is a thin cylinder going straight into the belly, and the scales read as stacked rings. Feathered thighs that blend into the belly, and a scale texture that wraps the leg continuously, would make the legs look like they hold up 6.75 m of beast.", "Part of your choice on the fourth question.", {"src": "../art/reviews/goose-joins/leg_hip.png", "alt": "Close-up of a thin leg entering the belly", "caption": "Today: a thin straight leg with no thigh, ringed like a pipe."}],
+      ["check", "Head detail", "Give the heads their own sharper textures", "", "The heads are the attacking parts, so the player looks at them most and sees them closest. One 4096 px texture is spread over the whole 6.75 m model, so the heads, teeth and brand soften up close (already noted in art/goose/README.md). A second texture set just for the three heads and necks would make them crisp, at the cost of one more texture set for the game to load and draw (a \"material\" in the engine).", "Your choice on the fifth question."]
+    ]
+  },
+  "changes": [
+    ["keep", "Version 1 model and clips", "Untouched.", null, "goose.blend, goose_rigged.blend and the version 1 clips stay as they are. They read the shared images in art/goose/textures/, so the new textures go in a separate folder (art/goose/textures_v2/) to keep version 1's look exactly as it was.", null, null],
+    ["new", "goose_v2 model", "A new version 2 model built by the same design scripts.", null, "goose_design.py gains a version 2 mode for the fused skin, the neck root and the new forms; build_goose.py writes goose_v2.blend, .glb and .fbx and bakes textures_v2/. The triangle budget stays 300,000.", null, null],
+    ["chg", "Version 2 rig and clips", "Rebuilt on the new model.", ["Bound to the version 1 mesh", "Bound to goose_v2; skin weights (how strongly each bone moves each part of the surface) carried over from the current rig by nearest surface, because the fused skin no longer splits into the named parts the current weighting uses"], "Every version 2 clip is regenerated by script and must be re-checked at the new joins, especially the neck root.", null, null]
+  ],
+  "choices": [
+    ["joins", "How should the parts be joined?", [
+      ["A", "Fuse the soft parts into one skin", 1, "Body, necks, wing arms, thighs and tail merged into one surface with smoothed, muscular joins; hard details stay separate."],
+      ["B", "Cover the joins only", 0, "Keep the separate pieces and add flared collars and feathers over each join. Cheaper, but the parts are still separate underneath and can show when the boss moves."]
+    ], "Only option A (fuse into one skin) removes the seams; option B (cover the joins) hides them until a neck bends the wrong way."],
+    ["neck", "How should the three necks grow?", [
+      ["A", "One massive root that forks into three", 1, "A single muscular base rising from the chest, splitting into the three necks partway up."],
+      ["B", "Three necks as now, with a shared collar", 0, "They still grow separately from the breast, blended at the base."]
+    ], "Option A (one root forking into three) reads as one creature and gives the silhouette one strong line."],
+    ["colour", "How should the textures change?", [
+      ["A", "Re-bake with colour and pattern flowing across the joins", 1, "Gradients over a metre at each join, with the feather pattern continuous across them."],
+      ["B", "Adjust the colours only", 0, "Soften the colour differences between parts without re-baking the pattern."]
+    ], "With a fused skin the textures must be re-baked anyway, so option A (re-bake with flowing colour) costs little extra."],
+    ["form", "Which form changes should go in?", [
+      ["A", "All of them", 1, "Feathers over the joins, muscle and sag on the body, ribs under torn skin, feathered thighs and continuous leg scales."],
+      ["B", "Feathers over the joins only", 0, "The quickest win for the separate look; the body stays a smooth egg."],
+      ["C", "Body form only", 0, "Muscle, sag and ribs under skin, without new feathers."]
+    ], "Together they turn the body from a shell into flesh, which is the heart of your note."],
+    ["heads", "Should the heads get their own sharper textures?", [
+      ["A", "Yes, a second texture set for the heads and necks", 1, "Crisp teeth, eyes and hide where the player looks most, for one more material."],
+      ["B", "No, keep one texture set", 0, "Simpler for the game; the heads stay soft up close."]
+    ], ""],
+    ["order", "When should this happen relative to the animation changes you just approved?", [
+      ["A", "Model first, then the animation changes on the new model", 1, "The attack tells, the new Crown Wakes and the stun and hits are built once, on the final body, and rendered once."],
+      ["B", "Animation changes first, then swap the model", 0, "The animation work starts now on the current body, then everything is rebuilt and re-rendered on the new model."]
+    ], "Option A avoids rendering every clip twice, and the neck root changes how the neck animations look."],
+    ["versions", "Should this be a new version 2 model beside the current one?", [
+      ["A", "Yes, a separate goose_v2 model and textures_v2", 1, "Version 1 keeps its exact look for comparison."],
+      ["B", "No, replace the current model", 0, "Simpler, but version 1's clips would change look and the comparison would be lost."]
+    ], "You asked to keep version 1 for comparison, and the textures are shared files, so only option A keeps it exact."]
+  ],
+  "wrapup": {
+    "summary": "Seven recommendations to make the goose one living beast: a fused skin, one forking neck root, colour flowing across the joins, feathers and muscle over the joins, real thighs, and sharper heads.",
+    "changing": "Nothing yet. If you approve, a version 2 model is built beside the current one and the version 2 rig and clips move onto it.",
+    "blocking": "Nothing is blocked except your answers to the seven questions. The animation build you approved waits until you choose the order in the sixth question.",
+    "next": "Once you approve, I log the decisions, open issues for the model work, and rebuild the version 2 rig and clips on it in the order you choose.",
+    "todo": ["Pick an answer for each of the seven questions under Choices.", "Tap <b>Copy my reply</b>.", "Send it with \"Design approved: goose model review\", or what to change."]
+  }
+}
