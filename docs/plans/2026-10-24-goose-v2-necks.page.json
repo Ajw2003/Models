@@ -1,0 +1,42 @@
+{
+  "title": "Goose v2 Necks",
+  "eyebrow": "Design for approval · Models #18, the necks after your QA check · nothing changed in the model yet",
+  "approval": "Design approved: goose v2 necks",
+  "short": {
+    "lead": "You said the version 2 necks still look like rigid, smooth tubes, and asked for necks that can move and show their vertebrae, like a real Canada goose's. A goose's neck has 17 to 18 vertebrae and bends in three regions, which is why it rests in an S. I ran a throwaway test that gives each neck an S-curve and vertebra ridges, without moving the heads. The pictures are untextured. Three questions follow.",
+    "hint": "Tap a step to see what it changes and why.",
+    "key": [["Recommendation", ""], ["Needs you first", "you"]],
+    "items": [
+      ["bulb", "Reference", "What a real Canada goose neck does", "", "A goose's neck has 17 to 18 vertebrae (Frontiers in Veterinary Science, 2025, on domestic geese). The vertebrae are longest in the middle of the neck and shorter at both ends. The neck bends in three regions: the base leans forward, the middle bends back and up, and the top tips forward to the head. Together those bends make the resting S shape. On a thin bird, the vertebrae show along the back and sides of the neck, while the front, over the windpipe, stays smooth.", "Nothing from you."],
+      ["hammer", "Vertebrae", "Show the vertebrae as ridges under the skin", "", "Each neck swells slightly at every joint between vertebrae and narrows in the middle of each vertebra. The swelling is strongest along the back, with smaller bumps on each side where the side processes of the bone sit. The front stays smooth. The test uses 15 vertebrae on the main neck above the root and 12 on each side neck, which adds no triangles, so the skin stays within its 75,000 cap.", "Your answer to \"How should the vertebrae show?\"", {"src": "docs/art/reviews/goose-v2-neck-prototype/ridges_three_quarter.png", "alt": "Untextured test render of three necks with vertebra ridges along their backs", "caption": "Throwaway test: vertebra ridges under the skin."}],
+      ["eye", "Shape", "Rest the necks in an S-curve", "", "In the current version 2 model each neck runs in a gentle straight line from the root to its head. In the test, each neck leans forward low, bends back in the middle and tips forward to the head, like an alert goose. The heads stay where they are, so the height stays 6.75 m.", "Your answer to \"How should the necks rest?\"", {"src": "docs/art/reviews/goose-v2-neck-prototype/ridges_side.png", "alt": "Untextured side view of the S-curved necks with vertebra ridges", "caption": "Throwaway test from the side: the S-curve."}],
+      ["list", "Bending", "One rig bone per vertebra", "you", "The necks can only bend where the rig has bones. Today the main neck has 7 bones and each side neck has 6, so each bone would carry two or three vertebrae and the ridges would stretch as the neck bends. With one bone per vertebra (15 and 12), every joint can bend on its own and the neck can coil. This is built in #21 (the rig), but deciding it now sets how the ridges are spaced.", "Your answer to \"How many bones should each neck get in #21?\""]
+    ]
+  },
+  "changes": [
+    ["chg", "Neck shape and surface", "Vertebra ridges and an S-curve.", ["Smooth tubes in gentle straight lines", "Ridged along the back and sides, resting in an S"], "spec.json's v2 neck paths gain the S-curve, and goose_design.py's version 2 mode shapes the ridges along each neck from a vertebra count in the spec. Version 1 is untouched.", null, null, {"before": {"src": "docs/art/reviews/goose-v2-joins/neck_base_side.png", "alt": "Current version 2 necks from the side: smooth tubes"}, "after": {"src": "docs/art/reviews/goose-v2-neck-prototype/ridges_side.png", "alt": "Throwaway test from the side: S-curved, ridged necks"}, "caption": "The current version 2 model, then the throwaway test. The test is untextured."}],
+    ["keep", "Bone ridge spikes", "The 13 bone spikes down the back of the main neck stay, unless you choose option B.", null, "They are the concept's bone ridge. If you choose option B on \"How should the vertebrae show?\", these would be replaced with one bone spike per vertebra.", null, null],
+    ["chg", "#21 (the rig)", "One bone per vertebra, if you choose that.", ["7 bones on the main neck, 6 on each side neck", "15 on the main neck, 12 on each side neck"], "The issue body for #21 is updated to say so once you approve.", null, null]
+  ],
+  "choices": [
+    ["look", "How should the vertebrae show?", [
+      ["A", "Ridges under the skin", 1, "A starved animal: the spine pushes up along the back and sides, and the front stays smooth.", {"src": "docs/art/reviews/goose-v2-neck-prototype/ridges_three_quarter.png", "alt": "Test render with vertebra ridges under the skin", "caption": "Option A."}],
+      ["B", "Ridges plus bone breaking through", 0, "The same ridges, with one bone spike per vertebra tearing out along the back, in place of today's 13 spikes. It is more monstrous, and costs 2,992 of the 5,172 triangles left (measured in the test).", {"src": "docs/art/reviews/goose-v2-neck-prototype/bones_side.png", "alt": "Test render with a bone spike breaking out of every vertebra", "caption": "Option B."}]
+    ], "I suggest option A (ridges under the skin), because it reads as a real goose's neck and leaves the triangles for #19 (muscle and feathers)."],
+    ["shape", "How should the necks rest?", [
+      ["A", "In a goose's S-curve", 1, "The base leans forward, the middle bends back, and the top tips forward to the head. The heads don't move."],
+      ["B", "In today's gentle lines", 0, "Only the ridges are added, and the neck shapes stay as they are now."]
+    ], "I suggest option A (the S-curve), because a straight neck reads as rigid even with ridges."],
+    ["bend", "How many bones should each neck get in #21?", [
+      ["A", "One per vertebra: 15 and 12", 1, "Each joint bends on its own, so the necks can coil and strike."],
+      ["B", "Keep 7 and 6", 0, "Fewer bones to animate, but each bone carries two or three ridges, which stretch when the neck bends."]
+    ], "I suggest option A (one bone per vertebra), since you asked for necks that can move."]
+  ],
+  "wrapup": {
+    "summary": "A redesign of the version 2 necks: vertebra ridges and a goose's S-curve, with one rig bone per vertebra later.",
+    "changing": "Nothing yet. If you approve, I rebuild goose_v2 with the new necks, render new close-ups and send you a new QA page.",
+    "blocking": "Your answers to the three questions.",
+    "next": "Once you approve, I update #18 and #21, rebuild the model and send you the result to check.",
+    "todo": ["Pick an answer for each of the three questions under Choices.", "Tap <b>Copy my reply</b>.", "Send it with \"Design approved: goose v2 necks\", or say what you want changed."]
+  }
+}
