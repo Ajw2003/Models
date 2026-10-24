@@ -731,9 +731,13 @@ def body_ribs(body):
     return parts
 
 
-def build_parts(spec=None):
+def build_parts(spec=None, version=1):
+    """version=2 swaps in the spec's "v2" design numbers (the neck root that forks into three); the
+    soft parts are still separate here, and build_goose.py --v2 fuses them into one skin."""
     spec = spec or load_spec()
     D = spec["design"]
+    if version == 2:
+        D = {**D, **spec["v2"]["design"]}
     rng = random.Random(D["eye_seed"])
     body = build_body(D)
     parts = [body]

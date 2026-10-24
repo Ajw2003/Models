@@ -388,6 +388,114 @@
       }
     }
   },
+  "v2": {
+    "note": "version 2 (Models #17, #18): read only by goose_design.build_parts(version=2) and build_goose.py --v2; version 1 ignores this block",
+    "design": {
+      "main_neck": {
+        "note": "one root rising from the chest that becomes the main neck; the side necks branch off its top at about 3.05 m. From path[2] up it is version 1's main neck, so the main head stays where it was",
+        "path": [
+          [
+            0,
+            -0.85,
+            2.0
+          ],
+          [
+            0,
+            -1.02,
+            2.6
+          ],
+          [
+            0,
+            -1.16,
+            3.05
+          ],
+          [
+            0,
+            -1.24,
+            3.45
+          ],
+          [
+            0,
+            -1.3,
+            4.05
+          ],
+          [
+            0,
+            -1.33,
+            4.6
+          ],
+          [
+            0,
+            -1.4,
+            4.95
+          ]
+        ],
+        "radii": [
+          0.78,
+          0.68,
+          0.4,
+          0.28,
+          0.21,
+          0.175,
+          0.165
+        ]
+      },
+      "side_neck": {
+        "note": "the +X neck, starting inside the root's top; from path[2] up it is version 1's side neck, so the side heads stay where they were",
+        "path": [
+          [
+            0.12,
+            -1.1,
+            2.85
+          ],
+          [
+            0.45,
+            -1.17,
+            3.15
+          ],
+          [
+            0.98,
+            -1.26,
+            3.45
+          ],
+          [
+            1.12,
+            -1.38,
+            3.85
+          ],
+          [
+            1.15,
+            -1.45,
+            4.05
+          ]
+        ],
+        "radii": [
+          0.3,
+          0.22,
+          0.17,
+          0.14,
+          0.13
+        ]
+      }
+    },
+    "skin": {
+      "note": "the soft parts melted into one closed skin: a voxel remesh, then smoothing only within join_width_m of where two soft parts meet, then a decimate down to triangle_cap. Colour and pattern are carried over from the nearest version 1 style surface until Models #20 re-bakes them",
+      "parts": [
+        "body",
+        "main_neck",
+        "side_neck_R",
+        "side_neck_L",
+        "wing_arm_R",
+        "wing_arm_L",
+        "leg_R",
+        "leg_L"
+      ],
+      "voxel_m": 0.022,
+      "join_width_m": 0.3,
+      "smooth_passes": 40,
+      "triangle_cap": 75000
+    }
+  },
   "build": [
     "Body: lofted ellipse rings, about 3.3 m long, 1.76 m wide, 1.46 m deep, lowest point 1.10 m just behind the legs; the body tilts down from chest to tail like a standing goose's; soot-brown back, ashen bars on the flanks, grimy breast (straight seam at y = -0.42 m), dirty-bone belly and undertail; five bare ribs break through each flank.",
     "Necks: one main neck rising straight out of the chest to 4.95 m, head held high and level like a standing goose's, radius 0.50 m where it rises out of the chest, tapering to 0.165 m; two side necks rising upright to +/-1.15 m and 4.05 m, radius 0.26 to 0.13 m. All black, a ridge of 13 bone spines down the back of the main neck.",

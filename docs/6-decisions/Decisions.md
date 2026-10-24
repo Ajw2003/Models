@@ -3,6 +3,28 @@
 The running log of what was decided in this repo, when and why. Newest entry at the top. Entries
 are never rewritten; a later decision flips an old entry's Status to Superseded with a pointer.
 
+## 2026-10-24 — Goose v2 skin (#18): melt and smooth, fork at 3.05 m, colours carried over
+
+**Context.** #18 (one fused skin and a forking neck root) is the first step of the version 2 goose
+(#17). A throwaway test (`docs/art/reviews/goose-v2-prototype/prototype_fuse.py`) fused the soft
+parts into one closed skin. The plan page is `docs/plans/2026-10-24-goose-v2-skin.html`.
+
+**Decision.** aj approved "Design approved: goose v2 skin. Build plan approved: goose v2 skin 1A 2A 3A":
+
+- Method (question 1): option A, a voxel remesh of the soft parts, smoothing only near the joins,
+  then a decimate to a 75,000 triangle skin.
+- Fork (question 2): option A, the root splits just above the breast, at about 3.05 m.
+- Texture until #20 (question 3): option A, each skin face copies the nearest version 1 surface's
+  colour and pattern, baked into `art/goose/textures_v2/`.
+
+The steps are #22 (design numbers), #23 (fuse and one-shell check) and #24 (build and review).
+
+**Why.** The test came out closed in both runs and the join width is one number; cutting and
+stitching eight tubes is fragile. The side heads sit at 4.05 m, so a higher fork leaves stubby side
+necks. A review sheet beside the concept needs colour to be judged.
+
+**Status.** Standing.
+
 ## 2026-10-24 — Goose model version 2: one living beast
 
 **Context.** aj asked for a senior game designer's critique of the goose model, textures and
