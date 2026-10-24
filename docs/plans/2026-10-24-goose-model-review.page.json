@@ -43,7 +43,7 @@
       ["A", "Yes, a second texture set for the heads and necks", 1, "Crisp teeth, eyes and hide where the player looks most, for one more material."],
       ["B", "No, keep one texture set", 0, "Simpler for the game; the heads stay soft up close."]
     ], ""],
-    ["order", "When should this happen relative to the animation changes you just approved?", [
+    ["order", "When should this happen relative to the animation changes from the design review (the attack tells, the new Crown Wakes, the stun and hits)?", [
       ["A", "Model first, then the animation changes on the new model", 1, "The attack tells, the new Crown Wakes and the stun and hits are built once, on the final body, and rendered once."],
       ["B", "Animation changes first, then swap the model", 0, "The animation work starts now on the current body, then everything is rebuilt and re-rendered on the new model."]
     ], "Option A avoids rendering every clip twice, and the neck root changes how the neck animations look."],
@@ -57,6 +57,6 @@
     "changing": "Nothing yet. If you approve, a version 2 model is built beside the current one and the version 2 rig and clips move onto it.",
     "blocking": "Nothing is blocked except your answers to the seven questions. The animation build you approved waits until you choose the order in the sixth question.",
     "next": "Once you approve, I log the decisions, open issues for the model work, and rebuild the version 2 rig and clips on it in the order you choose.",
-    "todo": ["Pick an answer for each of the seven questions under Choices.", "Tap <b>Copy my reply</b>.", "Send it with \"Design approved: goose model review\", or what to change."]
+    "todo": ["Pick an answer for each of the seven questions under Choices.", "Tap <b>Copy my reply</b>.", "Send it with \"Design approved: goose model review\", or say what you want changed."]
   }
 }
