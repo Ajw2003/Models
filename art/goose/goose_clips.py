@@ -32,7 +32,7 @@ import json, math, os, sys, time
 try:
     import bpy
     import numpy as np
-    from mathutils import Matrix, Vector
+    from mathutils import Matrix, Quaternion, Vector
 except ImportError:
     sys.exit("goose_clips.py: cannot import bpy/numpy; run it with the interpreter from setup_bpy.sh")
 
@@ -190,7 +190,7 @@ class Rig:
         rest = self.arm.matrix_world @ b.matrix_local
         return self.arm.pose.bones["pelvis"].matrix @ rest.inverted()
 
-    def min_z(self, body_only=False, core=False):
+    def min_z(self, body_only=False, core=False, trunk=False):
         self.mod.show_viewport = True
         dg = bpy.context.evaluated_depsgraph_get()
         ev = self.obj.evaluated_get(dg)
@@ -200,6 +200,13 @@ class Rig:
         ev.to_mesh_clear()
         self.mod.show_viewport = False
         z = co[2::3]
+        if trunk:  # the trunk only: no legs, wings, necks, heads, jaws, crowns or tongues
+            if not hasattr(self, "_trunk_mask"):
+                names = [g.name for g in self.obj.vertex_groups]
+                skip = ("neck_", "head_", "jaw_", "crown_", "tongue_", "wing_", "leg_")
+                self._trunk_mask = np.array([not names[max(v.groups, key=lambda g: g.weight).group].startswith(skip)
+                                             for v in self.obj.data.vertices])
+            return float(z[self._trunk_mask].min())
         if core:  # the trunk and legs only: no wings, necks, heads, jaws, crowns or tongues
             if not hasattr(self, "_core_mask"):
                 names = [g.name for g in self.obj.vertex_groups]
@@ -1084,7 +1091,7 @@ V2_CLIPS_B = (("death", False), ("crown_wakes", False))
 V2_MARKERS = {}
 
 
-def solve_floor(rig, n, pose_fn, nparams):
+def solve_floor(rig, n, pose_fn, nparams, lift_mask="core"):
     keys = []
     lifted = []
     for f in range(n + 1):
@@ -1092,7 +1099,7 @@ def solve_floor(rig, n, pose_fn, nparams):
         ks = [0.0] * nparams
         pose, legs = pose_fn(rig, t, ks)
         rig.apply_pose(pose, legs)
-        z = rig.min_z(core=True)
+        z = rig.min_z(trunk=True) if lift_mask == "trunk" else rig.min_z(core=True)
         lift = max(0.0, 0.004 - z)
         liftpose = {"root": {"t": (0, 0, lift)}} if lift else {}
         for i in range(nparams):
@@ -1121,6 +1128,7 @@ def solve_floor(rig, n, pose_fn, nparams):
             rig.apply_pose(pose, legs)
         if lift:
             lifted.append(lift)
+        rig.last_ks = list(ks)
         keys.append((f, rig.channels()))
     if lifted:
         print(f"goose_clips: floor fit lifted the trunk on {len(lifted)} frames, by up to {max(lifted):.3f} m")
@@ -1146,40 +1154,96 @@ def shudder_pose(t, times, dur=0.3, neck_deg=3.5, wing_deg=3.0, chains=(NECK_MAI
     return pose
 
 
-# --- death: collapse FORWARD onto the chest, wings splayed, necks flat in front, jaws slack, tongues out, then still
+# --- death: collapse FORWARD onto the chest, legs folded under, wings folded down on the floor, the three necks laid flat
+# in front and slightly fanned, each head rolled onto its cheek with the crown lying sideways, jaws slack, tongues on the floor
 DV_T = 5.6
 dv_c = envelope((0, 0), (0.45, 0), (1.3, 0.4), (1.95, 1.0), (2.4, 1.0))
 dv_a = curve((0, 0), (0.08, -0.1), (0.4, 0.8), (0.9, 0.4), (1.4, 0.1), (2.0, 0.0), (2.2, 0.0), (2.6, 0.0), (5.6, 0))
-dv_neck = envelope((0, 0), (1.5, 0), (2.4, 1.0), (3.0, 1.0))
-dv_jaw = envelope((0, 0), (1.9, 0), (2.8, 1.0), (3.1, 1.0))
+dv_neck = envelope((0, 0), (1.5, 0), (2.6, 1.0), (3.0, 1.0))
+dv_roll = envelope((0, 0), (2.0, 0), (2.9, 1.0), (3.1, 1.0))
+dv_jaw = envelope((0, 0), (1.9, 0), (2.9, 1.0), (3.1, 1.0))
 dv_tongue = envelope((0, 0), (2.2, 0), (3.2, 1.0), (3.3, 1.0))
-dv_wing = envelope((0, 0), (1.3, 0), (2.2, 1.0), (2.6, 1.0))
+dv_wing = envelope((0, 0), (1.3, 0), (2.3, 1.0), (2.6, 1.0))
+DV_PITCH, DV_FWD, DV_DROP = 17.0, 0.5, 1.4
+DV_ROLL = {"main": 80.0, "L": -85.0, "R": 85.0}  # about each head's forward axis: positive puts the crown on the -X side
+DV_FAN = {"main": 0.0, "L": 14.0, "R": -14.0}  # degrees the flat part of each neck fans out
+DV_FLOOR_H = 0.05  # how close to the floor a neck's axis is laid when nothing stops it
 
 
-def death2_pose(rig, t, ks):
-    kw, kn, kj, kt = ks
+def blend_dir(rig, name, target, w):
+    pb = rig.arm.pose.bones[name]
+    cur = (pb.tail - pb.head).normalized()
+    q = cur.rotation_difference(Vector(target).normalized())
+    q = Quaternion((1, 0, 0, 0)).slerp(q, w)
+    rig.apply_entry(name, {"aim": tuple(q @ cur)})
+
+
+def blend_orient(rig, name, target, w):
+    """Turn a bone toward the world orientation `target` (relative to its rest orientation) by the fraction w."""
+    b = rig.arm.data.bones[name]
+    rest3 = b.matrix_local.to_3x3()
+    cur = rig.arm.pose.bones[name].matrix.to_3x3().normalized() @ rest3.inverted()
+    q = Quaternion((1, 0, 0, 0))
+    q = cur.to_quaternion().slerp(target.to_quaternion(), w)
+    rig.apply_entry(name, {"orient": q.to_matrix()})
+
+
+def lay_chain(rig, chain, base_dir, floor_h, w, descend_deg=48.0):
+    """Aim a chain of bones along a path that goes from its first joint down to floor_h and then flat along base_dir."""
+    B = rig.arm.pose.bones[chain[0]].head.copy()
+    drop = max(B.z - floor_h, 0.0)
+    horiz = drop / math.tan(math.radians(descend_deg)) if drop > 1e-6 else 0.0
+    P1 = B + base_dir * horiz + Vector((0, 0, -drop))
+    seg1 = (P1 - B).length
+    s_ = 0.0
+    for n in chain:
+        s_ += rig.len[n]
+        T = (B + (P1 - B) * (s_ / seg1)) if (seg1 > 1e-9 and s_ <= seg1) else (P1 + base_dir * (s_ - seg1))
+        blend_dir(rig, n, T - rig.arm.pose.bones[n].head, w)
+
+
+def death3_pose(rig, t, ks):
+    kw, kn = ks
     pose = add_pose(idle_pose(0.0), RECOIL, dv_a(t))
     c = dv_c(t)
-    pose = add_pose(pose, {"pelvis": {"t": (0, -0.9 * c, -1.15 * c)}, "root": {"rot": (30.0 * c, 0, 0)}})
+    pose = add_pose(pose, {"pelvis": {"t": (0, -DV_FWD * c, -DV_DROP * c)}, "root": {"rot": (DV_PITCH * c, 0, 0)}})
     w = dv_wing(t) * kw
-    for sd in "LR":
+    for sd in "LR":  # folded down and back against the flanks
         sg = side_sign(sd)
-        pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * 38.0 * w, sg * -12.0 * w)},
-                               f"wing_fore.{sd}": {"rot": (0, sg * 22.0 * w, 0)}, f"wing_hand.{sd}": {"rot": (0, sg * 18.0 * w, 0)}})
-    nf = dv_neck(t) * kn
-    pose = add_pose(pose, neck_pose(NECK_MAIN, x=118.0 * nf))
-    pose = add_pose(pose, neck_pose(NECK_L, x=112.0 * nf, z=24.0 * nf))
-    pose = add_pose(pose, neck_pose(NECK_R, x=112.0 * nf, z=-24.0 * nf))
-    for hd, jw in zip(HEADS, JAWS):
-        pose = add_pose(pose, {hd: {"rot": (26.0 * nf, 0, 0)}, jw: {"rot": (56.0 * dv_jaw(t) * kj, 0, 0)}})
-    tf = dv_tongue(t) * kt
-    for lab in ("main", "L", "R"):
-        for i in (1, 2, 3):
-            pose = add_pose(pose, {f"tongue_{lab}_{i}": {"rot": (30.0 * tf, 0, 0)}})
+        pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * 70.0 * w, sg * 55.0 * w)},
+                               f"wing_upper.{sd}": {"rot": (0, 0, sg * 10.0 * w)},
+                               f"wing_fore.{sd}": {"rot": (0, sg * 10.0 * w, sg * 45.0 * w)},
+                               f"wing_hand.{sd}": {"rot": (0, 0, sg * 60.0 * w)}})
     sh = shudder_pose(t, [2.0], dur=0.4)  # the impact
     EFFORT_POSES.setdefault("death", []).append(sh)
     pose = add_pose(pose, sh)
-    return pose, planted(rig)
+    nw, rw, jw_, tw = dv_neck(t), dv_roll(t), dv_jaw(t), dv_tongue(t)
+    floor_h = DV_FLOOR_H + (1.0 - kn) * 0.9
+
+    def finish(r):
+        for sd in "LR":  # legs folded under the body: thigh forward, shin back, tarsus flat on the floor
+            tgt = Vector(r.rest_foot[sd])
+            tgt.y += 0.25 * c
+            tgt.z += 0.02 * c
+            for n, e in r.leg_aims(sd, tgt, FWD, phi_deg=10.0 + 68.0 * c).items():
+                r.apply_entry(n, e)
+        for chain, head, jaw, lab in ((NECK_MAIN, "head_main", "jaw_main", "main"), (NECK_L, "head_L", "jaw_L", "L"), (NECK_R, "head_R", "jaw_R", "R")):
+            f = Matrix.Rotation(math.radians(DV_FAN[lab]), 3, "Z") @ FWD
+            lay_chain(r, chain, f, floor_h, nw)
+            pb = r.arm.pose.bones[chain[-1]]
+            fdir = Vector((pb.tail - pb.head)).normalized() if nw > 0.99 else f
+            rest_dir = (r.arm.data.bones[head].tail_local - r.arm.data.bones[head].head_local).normalized()
+            R_head = Matrix.Rotation(math.radians(DV_ROLL[lab]) * rw, 3, fdir) @ rest_dir.rotation_difference(fdir).to_matrix()
+            blend_orient(r, head, R_head, nw)
+            lateral = R_head @ Vector((1, 0, 0))
+            R_jaw = Matrix.Rotation(math.radians(56.0) * jw_, 3, lateral) @ R_head
+            blend_orient(r, jaw, R_jaw, nw)
+            tchain = [f"tongue_{lab}_{i}" for i in (1, 2, 3)]
+            fh = Vector((fdir.x, fdir.y, 0)).normalized()
+            if tw > 0:  # the tongue runs out over the floor
+                lay_chain(r, tchain, fh, 0.06, tw, descend_deg=40.0)
+        return {}
+    return pose, finish
 
 
 # --- crown_wakes: dead-looking collapse, stillness and a twitch, side heads rise one at a time, the main head drags up
@@ -1313,7 +1377,7 @@ def solve_v2(rig, name):
             rig.apply_pose(pose, legs)
             keys.append((f, rig.channels()))
     elif name == "death":
-        keys = solve_floor(rig, n2, death2_pose, 4)
+        keys = solve_floor(rig, n2, death3_pose, 2, lift_mask="trunk")
     elif name == "crown_wakes":
         V2_MARKERS[name] = CW2_MARKERS
         MARKER_SCALE[name] = 1.0
