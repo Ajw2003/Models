@@ -7,16 +7,16 @@
     "hint": "Tap a step to see what it changes.",
     "key": [["I build it", ""], ["Needs you", "you"]],
     "items": [
-      ["hammer", "#26", "Put the S-curve, ridges and spikes in the design", "", "spec.json's version 2 neck paths take the test's S-curve. A new vertebrae block holds the counts (15 for the main neck, 12 for each side neck) and the ridge and spike sizes. goose_design.py's version 2 mode shapes the ridges and places one spike per vertebra in place of the 13 spikes on the main neck. Version 1 still gives 1,072 parts and 272,380 triangles.", "Nothing from you.", {"src": "docs/art/reviews/goose-v2-neck-prototype/bones_side.png", "alt": "Throwaway test: S-curved necks with a bone spike per vertebra", "caption": "The look being built, from the throwaway test (untextured)."}],
+      ["hammer", "#26", "Put the S-curve, ridges and spikes in the design", "", "spec.json's version 2 neck paths take the test's S-curve. A new vertebrae block holds the counts (15 for the main neck, 12 for each side neck) and the ridge and spike sizes. goose_design.py's version 2 mode shapes the ridges and places one spike per vertebra in place of the main neck's 13 spikes. Version 1 still gives 1,072 parts and 272,380 triangles.", "Nothing from you.", {"src": "docs/art/reviews/goose-v2-neck-prototype/bones_side.png", "alt": "Throwaway test: S-curved necks with a bone spike per vertebra", "caption": "The look being built, from the throwaway test (untextured)."}],
       ["check", "#27", "Rebuild goose_v2 and check it", "", "The full version 2 build runs with the same checks: under 300,000 triangles, 6.75 m tall within 0.15 m, and a skin of 1 piece. The test measured 2,992 extra triangles for the spikes, so, if the test's count holds, the total should be 297,820: the current goose_v2's 294,828 plus 2,992. The build refuses to export if the total goes over 300,000 triangles. Then I re-render the close-ups and views, update the docs, and change the text of #21 (the rig) to ask for 15 main-neck bones and 12 per side neck.", "Nothing from you."],
       ["eye", "QA", "You check the new necks", "you", "A new QA page shows the necks from the side and front, next to the version you rejected.", "Your QA check."]
     ]
   },
   "changes": [
     ["chg", "art/goose/spec.json", "New v2 neck paths and a vertebrae block.", ["Gentle straight neck paths", "S-curved paths, plus vertebra counts and sizes"], "Version 1 reads none of it.", null, null],
-    ["chg", "art/goose/goose_design.py", "Version 2 mode shapes the ridges and spikes.", ["Smooth tubes and 13 spikes on the main neck", "Ridged tubes and one spike per vertebra on all three necks"], "The ridge shape is the one from the throwaway test (docs/art/reviews/goose-v2-neck-prototype/prototype_neck.py).", null, null],
+    ["chg", "art/goose/goose_design.py", "Version 2 mode shapes the ridges and spikes.", ["Smooth tubes, with 13 spikes down the main neck", "Ridged tubes and one spike per vertebra on all three necks"], "The ridge shape is the one from the throwaway test (docs/art/reviews/goose-v2-neck-prototype/prototype_neck.py).", null, null],
     ["keep", "build_goose.py and goose_skin.py", "Unchanged.", null, "The fused skin and its checks work as they are.", null, null],
-    ["chg", "#21 (the rig)", "One bone per vertebra.", ["7 bones on the main neck, 6 on each side neck", "15 and 12"], "Only the issue text changes now; the rig itself is built in #21.", null, null]
+    ["chg", "#21 (the rig)", "One bone per vertebra.", ["7 main-neck bones and 6 per side neck", "15 and 12"], "Only the issue text changes now; the rig itself is built in #21.", null, null]
   ],
   "choices": [],
   "wrapup": {
