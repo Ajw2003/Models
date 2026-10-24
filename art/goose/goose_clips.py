@@ -1164,10 +1164,12 @@ dv_roll = envelope((0, 0), (2.0, 0), (2.9, 1.0), (3.1, 1.0))
 dv_jaw = envelope((0, 0), (1.9, 0), (2.9, 1.0), (3.1, 1.0))
 dv_tongue = envelope((0, 0), (2.2, 0), (3.2, 1.0), (3.3, 1.0))
 dv_wing = envelope((0, 0), (1.3, 0), (2.3, 1.0), (2.6, 1.0))
-DV_PITCH, DV_FWD, DV_DROP = 17.0, 0.5, 1.4
-DV_ROLL = {"main": 80.0, "L": -85.0, "R": 85.0}  # about each head's forward axis: positive puts the crown on the -X side
+DV_PITCH, DV_FWD, DV_DROP = -10.0, 0.5, 0.9
+DV_ROLL = {"main": -60.0, "L": -60.0, "R": 60.0}  # about each head's forward axis: negative puts the crown on the +X side
+DV_WING_ROLL = 90.0  # degrees each wing is rolled about its own arm so the feathers lie flat
 DV_FAN = {"main": 0.0, "L": 14.0, "R": -14.0}  # degrees the flat part of each neck fans out
-DV_FLOOR_H = 0.05  # how close to the floor a neck's axis is laid when nothing stops it
+MAIN_RADII = [0.5, 0.4, 0.28, 0.21, 0.175, 0.165]  # the necks' tube radii in spec.json, root to head
+SIDE_RADII = [0.26, 0.21, 0.17, 0.14, 0.13]
 
 
 def blend_dir(rig, name, target, w):
@@ -1188,18 +1190,34 @@ def blend_orient(rig, name, target, w):
     rig.apply_entry(name, {"orient": q.to_matrix()})
 
 
-def lay_chain(rig, chain, base_dir, floor_h, w, descend_deg=48.0):
-    """Aim a chain of bones along a path that goes from its first joint down to floor_h and then flat along base_dir."""
-    B = rig.arm.pose.bones[chain[0]].head.copy()
-    drop = max(B.z - floor_h, 0.0)
-    horiz = drop / math.tan(math.radians(descend_deg)) if drop > 1e-6 else 0.0
-    P1 = B + base_dir * horiz + Vector((0, 0, -drop))
-    seg1 = (P1 - B).length
-    s_ = 0.0
-    for n in chain:
-        s_ += rig.len[n]
-        T = (B + (P1 - B) * (s_ / seg1)) if (seg1 > 1e-9 and s_ <= seg1) else (P1 + base_dir * (s_ - seg1))
-        blend_dir(rig, n, T - rig.arm.pose.bones[n].head, w)
+def lay_chain(rig, chain, base_dir, heights, w, descend_deg=48.0):
+    """Aim a chain of bones so each tail lies at its own height (heights is a list, or one number for all), going down from
+    the first joint no steeper than descend_deg, then flat along base_dir."""
+    if not isinstance(heights, (list, tuple)):
+        heights = [heights] * len(chain)
+    sin_d = math.sin(math.radians(descend_deg))
+    for n, hgt in zip(chain, heights):
+        pb = rig.arm.pose.bones[n]
+        head = pb.head.copy()
+        L = rig.len[n]
+        dz = max(hgt - head.z, -L * sin_d)
+        dz = min(dz, L * sin_d)
+        horiz = math.sqrt(max(L * L - dz * dz, 1e-9))
+        T = head + base_dir * horiz + Vector((0, 0, dz))
+        blend_dir(rig, n, T - head, w)
+
+
+def neck_heights(chain, radii, head_scale, extra):
+    """Axis height for each bone tail of a laid-out neck: its tube radius plus a margin, and a head's worth at the end."""
+    n = len(chain)
+    out = []
+    for i in range(n):
+        f = (i + 1) / n * (len(radii) - 1)
+        lo = int(min(f, len(radii) - 2))
+        r = radii[lo] + (radii[lo + 1] - radii[lo]) * (f - lo)
+        out.append(r + 0.04 + extra)
+    out[-1] = max(out[-1], 0.30 * head_scale + extra)
+    return out
 
 
 def death3_pose(rig, t, ks):
@@ -1207,29 +1225,33 @@ def death3_pose(rig, t, ks):
     pose = add_pose(idle_pose(0.0), RECOIL, dv_a(t))
     c = dv_c(t)
     pose = add_pose(pose, {"pelvis": {"t": (0, -DV_FWD * c, -DV_DROP * c)}, "root": {"rot": (DV_PITCH * c, 0, 0)}})
-    w = dv_wing(t) * kw
-    for sd in "LR":  # folded down and back against the flanks
-        sg = side_sign(sd)
-        pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * 70.0 * w, sg * 55.0 * w)},
-                               f"wing_upper.{sd}": {"rot": (0, 0, sg * 10.0 * w)},
-                               f"wing_fore.{sd}": {"rot": (0, sg * 10.0 * w, sg * 45.0 * w)},
-                               f"wing_hand.{sd}": {"rot": (0, 0, sg * 60.0 * w)}})
+    ww = dv_wing(t) * kw
     sh = shudder_pose(t, [2.0], dur=0.4)  # the impact
     EFFORT_POSES.setdefault("death", []).append(sh)
     pose = add_pose(pose, sh)
     nw, rw, jw_, tw = dv_neck(t), dv_roll(t), dv_jaw(t), dv_tongue(t)
-    floor_h = DV_FLOOR_H + (1.0 - kn) * 0.9
+    extra = (1.0 - kn) * 0.6
+    wextra = 0.0
 
     def finish(r):
-        for sd in "LR":  # legs folded under the body: thigh forward, shin back, tarsus flat on the floor
+        lw = smooth(max(0.0, (c - 0.35) / 0.65))
+        for sd in "LR":  # standing legs planted at first; then they fold out and trail back along the floor beside the belly
+            sg = side_sign(sd)
             tgt = Vector(r.rest_foot[sd])
-            tgt.y += 0.25 * c
             tgt.z += 0.02 * c
             for n, e in r.leg_aims(sd, tgt, FWD, phi_deg=10.0 + 68.0 * c).items():
                 r.apply_entry(n, e)
+            if lw > 0:
+                lchain = [f"leg_{k}.{sd}" for k in ("thigh", "shin", "tarsus", "toes")]
+                ldir = Vector((sg * 0.55, 1.0, 0.0)).normalized()
+                lay_chain(r, lchain, ldir, [0.28, 0.20, 0.19, 0.19], lw, descend_deg=75.0)
+                bt = r.arm.data.bones[lchain[-1]]
+                rest_dir = (bt.tail_local - bt.head_local).normalized()
+                blend_orient(r, lchain[-1], rest_dir.rotation_difference(ldir).to_matrix(), lw)  # toes flat, not rolled on edge
         for chain, head, jaw, lab in ((NECK_MAIN, "head_main", "jaw_main", "main"), (NECK_L, "head_L", "jaw_L", "L"), (NECK_R, "head_R", "jaw_R", "R")):
             f = Matrix.Rotation(math.radians(DV_FAN[lab]), 3, "Z") @ FWD
-            lay_chain(r, chain, f, floor_h, nw)
+            radii = MAIN_RADII if lab == "main" else SIDE_RADII
+            lay_chain(r, chain, f, neck_heights(chain, radii, 1.0 if lab == "main" else 0.74, extra), nw, descend_deg=68.0)
             pb = r.arm.pose.bones[chain[-1]]
             fdir = Vector((pb.tail - pb.head)).normalized() if nw > 0.99 else f
             rest_dir = (r.arm.data.bones[head].tail_local - r.arm.data.bones[head].head_local).normalized()
@@ -1241,7 +1263,17 @@ def death3_pose(rig, t, ks):
             tchain = [f"tongue_{lab}_{i}" for i in (1, 2, 3)]
             fh = Vector((fdir.x, fdir.y, 0)).normalized()
             if tw > 0:  # the tongue runs out over the floor
-                lay_chain(r, tchain, fh, 0.06, tw, descend_deg=40.0)
+                lay_chain(r, tchain, fh, 0.06, tw, descend_deg=80.0)
+        for sd in "LR":  # wings folded down onto the floor beside the body and trailing back, fanned out a little
+            sg = side_sign(sd)
+            wchain = [f"wing_{k}.{sd}" for k in ("shoulder", "upper", "fore", "hand")]
+            fb = Matrix.Rotation(math.radians(-sg * 18.0), 3, "Z") @ Vector((0, 1, 0))
+            n0 = wchain[0]  # roll the whole wing about its shoulder axis first (the aims after it keep the roll), so the
+            pb = r.arm.pose.bones[n0]  # feathers lie flat on the floor instead of hanging down
+            axis = (pb.tail - pb.head).normalized()
+            cur = pb.matrix.to_3x3().normalized() @ r.arm.data.bones[n0].matrix_local.to_3x3().inverted()
+            blend_orient(r, n0, Matrix.Rotation(math.radians(sg * DV_WING_ROLL), 3, axis) @ cur, ww)
+            lay_chain(r, wchain, fb, 0.12 + wextra, ww, descend_deg=70.0)
         return {}
     return pose, finish
 
@@ -1377,7 +1409,7 @@ def solve_v2(rig, name):
             rig.apply_pose(pose, legs)
             keys.append((f, rig.channels()))
     elif name == "death":
-        keys = solve_floor(rig, n2, death3_pose, 2, lift_mask="trunk")
+        keys = solve_floor(rig, n2, death3_pose, 2, lift_mask="core")
     elif name == "crown_wakes":
         V2_MARKERS[name] = CW2_MARKERS
         MARKER_SCALE[name] = 1.0
@@ -1606,6 +1638,11 @@ def build():
     metrics = {}
     acts = {}
     clips = (V2_CLIPS + V2_CLIPS_B) if V2 else CLIP_LIST
+    only = os.environ.get("GOOSE_ONLY")  # development: build just these clips, into GOOSE_OUT, without touching metrics.json
+    if only:
+        if not os.environ.get("GOOSE_OUT"):
+            die("GOOSE_ONLY needs GOOSE_OUT (a scratch .blend) so no committed file is overwritten")
+        clips = tuple(c for c in clips if c[0] in only.split(","))
     for name, loop in clips:
         t1 = time.time()
         rig.reach_err = 0.0
@@ -1622,11 +1659,12 @@ def build():
     rig.mod.show_viewport = True
     bpy.ops.object.mode_set(mode="OBJECT")
     os.makedirs(CLIPS_DIR, exist_ok=True)
-    with open(os.path.join(CLIPS_DIR, "metrics.json"), "w") as f:
-        json.dump(metrics, f, indent=1)
+    if not only:
+        with open(os.path.join(CLIPS_DIR, "metrics.json"), "w") as f:
+            json.dump(metrics, f, indent=1)
     if not V2:  # (the version 2 manifest comes with the full clip list)
         write_manifest(metrics)
-    bpy.ops.wm.save_as_mainfile(filepath=os.path.join(HERE, ANIMATED), compress=True)
+    bpy.ops.wm.save_as_mainfile(filepath=os.environ.get("GOOSE_OUT") or os.path.join(HERE, ANIMATED), compress=True)
     bad = [n for n, m in metrics.items() if not m["min_z_ok"]]
     print(f"goose_clips: wrote {ANIMATED} and {os.path.basename(CLIPS_DIR)}/metrics.json in {time.time() - t0:.1f} s")
     if bad:
@@ -1775,7 +1813,7 @@ def render(names):
         die("set GOOSE_CLIPS_TMP to a scratch directory for the intermediate frames")
     os.makedirs(tmp, exist_ok=True)
     os.makedirs(CLIPS_DIR, exist_ok=True)
-    bpy.ops.wm.open_mainfile(filepath=os.path.join(HERE, ANIMATED))
+    bpy.ops.wm.open_mainfile(filepath=os.environ.get("GOOSE_BLEND") or os.path.join(HERE, ANIMATED))
     arm = bpy.data.objects["goose_rig"]
     bpy.context.view_layer.objects.active = arm
 
