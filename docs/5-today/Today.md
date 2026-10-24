@@ -9,7 +9,10 @@ Built #18 (steps #22, #23, #24): `goose_v2` with one fused skin and the forking 
 one-shell check caught the wing arms stopping 0.1 m short of the body, so in version 2 they now
 reach into it. Review sheet: `docs/art/reviews/goose-v2-review.png`.
 
-**Next, in order:** aj reviews #18; then #19, #20 and #21.
+aj's QA check failed #18: the necks read as rigid, smooth tubes. Designed and built #25 (#26, #27):
+S-curved necks with vertebra ridges and a bone spike per vertebra; 297,820 triangles.
+
+**Next, in order:** aj reviews #18 with #25; then #19, #20 and #21.
 
 ---
 
