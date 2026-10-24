@@ -1091,12 +1091,12 @@ V2_CLIPS_B = (("death", False), ("crown_wakes", False))
 V2_MARKERS = {}
 
 
-def solve_floor(rig, n, pose_fn, nparams, lift_mask="core"):
+def solve_floor(rig, n, pose_fn, nparams, lift_mask="core", init=None):
     keys = []
     lifted = []
     for f in range(n + 1):
         t = f / FPS
-        ks = [0.0] * nparams
+        ks = list(init) if init else [0.0] * nparams
         pose, legs = pose_fn(rig, t, ks)
         rig.apply_pose(pose, legs)
         z = rig.min_z(trunk=True) if lift_mask == "trunk" else rig.min_z(core=True)
@@ -1164,7 +1164,7 @@ dv_roll = envelope((0, 0), (2.0, 0), (2.9, 1.0), (3.1, 1.0))
 dv_jaw = envelope((0, 0), (1.9, 0), (2.9, 1.0), (3.1, 1.0))
 dv_tongue = envelope((0, 0), (2.2, 0), (3.2, 1.0), (3.3, 1.0))
 dv_wing = envelope((0, 0), (1.3, 0), (2.3, 1.0), (2.6, 1.0))
-DV_PITCH, DV_FWD, DV_DROP = -10.0, 0.5, 0.9
+DV_PITCH, DV_FWD, DV_DROP = -10.0, 0.5, 0.91
 DV_ROLL = {"main": -60.0, "L": -60.0, "R": 60.0}  # about each head's forward axis: negative puts the crown on the +X side
 DV_WING_ROLL = 90.0  # degrees each wing is rolled about its own arm so the feathers lie flat
 DV_FAN = {"main": 0.0, "L": 14.0, "R": -14.0}  # degrees the flat part of each neck fans out
@@ -1225,13 +1225,15 @@ def death3_pose(rig, t, ks):
     pose = add_pose(idle_pose(0.0), RECOIL, dv_a(t))
     c = dv_c(t)
     pose = add_pose(pose, {"pelvis": {"t": (0, -DV_FWD * c, -DV_DROP * c)}, "root": {"rot": (DV_PITCH * c, 0, 0)}})
-    ww = dv_wing(t) * kw
+    ww = dv_wing(t)
     sh = shudder_pose(t, [2.0], dur=0.4)  # the impact
     EFFORT_POSES.setdefault("death", []).append(sh)
     pose = add_pose(pose, sh)
     nw, rw, jw_, tw = dv_neck(t), dv_roll(t), dv_jaw(t), dv_tongue(t)
     extra = (1.0 - kn) * 0.6
-    wextra = 0.0
+    wextra = (1.0 - kw) * 0.6
+    wdir_w = smooth(min(1.0, ww / 0.5))
+    raise_w = 1.8 * (1.0 - smooth(max(0.0, (ww - 0.5) / 0.5)))
 
     def finish(r):
         lw = smooth(max(0.0, (c - 0.35) / 0.65)) * kl
@@ -1271,13 +1273,13 @@ def death3_pose(rig, t, ks):
         for sd in "LR":  # wings folded down onto the floor beside the body and trailing back, fanned out a little
             sg = side_sign(sd)
             wchain = [f"wing_{k}.{sd}" for k in ("shoulder", "upper", "fore", "hand")]
-            fb = Matrix.Rotation(math.radians(-sg * 18.0), 3, "Z") @ Vector((0, 1, 0))
+            fb = Matrix.Rotation(math.radians(-sg * 8.0), 3, "Z") @ Vector((0, 1, 0))
             n0 = wchain[0]  # roll the whole wing about its shoulder axis first (the aims after it keep the roll), so the
             pb = r.arm.pose.bones[n0]  # feathers lie flat on the floor instead of hanging down
             axis = (pb.tail - pb.head).normalized()
             cur = pb.matrix.to_3x3().normalized() @ r.arm.data.bones[n0].matrix_local.to_3x3().inverted()
-            blend_orient(r, n0, Matrix.Rotation(math.radians(sg * DV_WING_ROLL), 3, axis) @ cur, ww)
-            lay_chain(r, wchain, fb, 0.12 + wextra, ww, descend_deg=70.0)
+            blend_orient(r, n0, Matrix.Rotation(math.radians(sg * DV_WING_ROLL), 3, axis) @ cur, wdir_w)
+            lay_chain(r, wchain, fb, 0.17 + wextra + raise_w, wdir_w, descend_deg=70.0)
         return {}
     return pose, finish
 
@@ -1413,7 +1415,7 @@ def solve_v2(rig, name):
             rig.apply_pose(pose, legs)
             keys.append((f, rig.channels()))
     elif name == "death":
-        keys = solve_floor(rig, n2, death3_pose, 3, lift_mask="core")
+        keys = solve_floor(rig, n2, death3_pose, 3, lift_mask="core", init=[0.0, 1.0, 0.0])
     elif name == "crown_wakes":
         V2_MARKERS[name] = CW2_MARKERS
         MARKER_SCALE[name] = 1.0
@@ -1577,6 +1579,23 @@ def measure(rig, name, act, loop, ratio=1.0):
            "loop_pose_diff_m": round(float(np.abs(pose_first - pose_last).max()), 6) if loop else None,
            "measure_seconds": round(time.time() - t0, 1)}
     rootz, rootxy, headpos = np.array(rootz), np.array(rootxy), np.array(headpos)
+    if V2 and name == "death":  # the final frame (the loop above left the scene on it): is it lying down?
+        names_ = [g_.name for g_ in rig.obj.vertex_groups]
+        prim_ = [names_[max(v.groups, key=lambda g_: g_.weight).group] for v in rig.obj.data.vertices]
+        zz = co[2::3] if co.ndim == 1 else co[:, 2]
+        trunk_ = np.array([not p_.startswith(("neck_", "head_", "jaw_", "crown_", "tongue_", "wing_", "leg_")) for p_ in prim_])
+        breast_ = np.array([p_ == "spine_3" for p_ in prim_])
+        pb = ev_arm.pose.bones
+        chains = {"main": NECK_MAIN, "L": NECK_L, "R": NECK_R}
+        out["final_pose"] = {
+            "lowest_trunk_vertex_z_m": round(float(zz[trunk_].min()), 3),
+            "lowest_breast_vertex_z_m": round(float(zz[breast_].min()), 3),
+            "root_lift_z_m": round(float(pb["root"].head[2]), 3),
+            "neck_bone_tail_heights_m": {k: [round(float(pb[n].tail[2]), 2) for n in v] for k, v in chains.items()},
+            "max_neck_bone_tail_height_beyond_the_first_three_m": round(max(float(pb[n].tail[2]) for v in chains.values() for n in v[3:]), 3),
+            "tongue_tip_z_m": {k: round(float(pb[f"tongue_{k}_3"].tail[2]), 3) for k in chains},
+            "still_from_frame": None,
+        }
     if name in EFFORT_POSES:
         out["effort_layer"] = rot_stats(EFFORT_POSES[name])
         if name in EFFORT_BREATHS:
@@ -1968,9 +1987,44 @@ def compare(names):
         print(f"goose_clips: {name}_compare.mp4: v1 {d1:.2f} s | v2 {d2:.2f} s")
 
 
+def final_views(name, outdir):
+    """Close-ups of a clip's last frame: the whole body from low in three-quarter, the three heads with their tongues, and
+    from above. Written to outdir as <clip>_final_<view>.png."""
+    bpy.ops.wm.open_mainfile(filepath=os.environ.get("GOOSE_BLEND") or os.path.join(HERE, ANIMATED))
+    arm = bpy.data.objects["goose_rig"]
+    bpy.context.view_layer.objects.active = arm
+    arm.animation_data_create()
+    act = bpy.data.actions[name]
+    arm.animation_data.action = act
+    sc = bpy.context.scene
+    sc.frame_set(int(act.frame_end))
+    ev = arm.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    body = Vector(ev.pose.bones["spine_1"].head)
+    heads = [Vector(ev.pose.bones[f"head_{x}"].head) for x in ("main", "L", "R")]
+    hc = sum(heads, Vector()) / 3
+    views = (("low_threequarter", (body + hc) / 2, 8.0, -35.0, 8.0), ("heads", hc, 2.6, -40.0, 22.0), ("top", (body + hc) / 2, 9.0, 0.0, 85.0))
+    os.makedirs(outdir, exist_ok=True)
+    for label, target, scale, yaw, pitch in views:
+        setup_scene(700, 24, tuple(target))
+        cam = sc.camera
+        cam.data.ortho_scale = scale
+        yr, pr = math.radians(yaw), math.radians(pitch)
+        toward = Vector((math.sin(yr) * math.cos(pr), -math.cos(yr) * math.cos(pr), math.sin(pr)))
+        cam.location = Vector(target) + toward * 60
+        cam.rotation_euler = (-toward).to_track_quat("-Z", "Y").to_euler()
+        path = os.path.join(outdir, f"{name}_final_{label}.png")
+        sc.render.filepath = path
+        bpy.ops.render.render(write_still=True)
+        composite(path)
+        print(f"goose_clips: wrote {path}")
+
+
 def main():
-    if not ARGS or ARGS[0] not in ("build", "render", "export", "compare"):
-        die("usage: goose_clips.py [--v2] build | render [clip ...] | export | compare [clip ...]")
+    if not ARGS or ARGS[0] not in ("build", "render", "export", "compare", "final"):
+        die("usage: goose_clips.py [--v2] build | render [clip ...] | export | compare [clip ...] | final CLIP")
+    if ARGS[0] == "final":
+        final_views(ARGS[1], os.environ.get("GOOSE_FINAL_DIR") or CLIPS_DIR)
+        return
     if V2 and ARGS[0] == "export":
         die("version 2: the export waits for the full clip list (a later issue)")
     if ARGS[0] == "compare":
