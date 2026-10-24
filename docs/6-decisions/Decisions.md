@@ -3,6 +3,38 @@
 The running log of what was decided in this repo, when and why. Newest entry at the top. Entries
 are never rewritten; a later decision flips an old entry's Status to Superseded with a pointer.
 
+## 2026-10-24 — Goose model version 2: one living beast
+
+**Context.** aj asked for a senior game designer's critique of the goose model, textures and
+blending, noting that the parts read as separate models. Close-ups
+(`docs/art/reviews/goose-joins/`) and a mesh count showed 1,071 separate closed pieces: each neck,
+wing and leg is a tube pushed into an egg-shaped body, with hard colour lines at every join. The
+proposal is `docs/plans/2026-10-24-goose-model-review.html`.
+
+**Decision.** aj approved "Design approved: goose model review 1A 2A 3A 4A 5A 6A 7A":
+
+- Joins (question 1): option A, fuse the soft parts (body, necks, wing arms, thighs, tail) into one
+  skin with smoothed, muscular joins; hard details (teeth, ribs, claws, crowns, feathers) stay
+  separate pieces.
+- Neck (question 2): option A, one massive neck root rising from the chest that forks into three.
+- Colour (question 3): option A, re-bake with colour and feather pattern flowing across the joins.
+- Form (question 4): option A, all of feathers over the joins, muscle and sag, ribs under torn skin,
+  feathered thighs and continuous leg scales.
+- Heads (question 5): option A, a second, sharper texture set for the heads and necks.
+- Order (question 6): option A, the model first, then the design review's animation changes (attack
+  tells, the new Crown Wakes, the stun and hits) on the new model.
+- Versions (question 7): option A, a separate goose_v2 model and `art/goose/textures_v2/`, so
+  version 1 keeps its exact look.
+
+The design review's own build approval was never recorded (the session had restarted outside the
+repo), so its animation work is folded into this plan after the model work.
+
+**Why.** A living creature has no seams; one forking neck root reads as one beast and gives one
+strong silhouette line; flowing colour removes the visible part boundaries; the heads are what the
+player watches; building the model first means every clip is built and rendered once.
+
+**Status.** Standing.
+
 ## 2026-10-24 — Goose design review: slow dread, fast strikes, partial hits, goose tells
 
 **Context.** aj asked for a senior game designer's review of the version 2 goose clips for a
