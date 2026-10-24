@@ -273,7 +273,7 @@ const PAGE = {
   "eyebrow": "Build plan for approval · Models issue #18, one fused skin and a neck root that forks into three · nothing changed yet",
   "approval": "Build plan approved: goose v2 skin",
   "short": {
-    "lead": "This is the first step of the goose version 2 model (issue #17), and the step that unblocks #19, #20 and #21. Today the goose is 1,072 separate pieces, with each neck, wing and leg pushed into an egg-shaped body. I built a quick throwaway test that melts the soft parts into one closed skin and gives the neck a single root that forks into three. It ran in 5 seconds, with no holes in the surface. The pictures below come from that test, untextured. Three choices decide how the real build does it.",
+    "lead": "This is the first step of the goose version 2 model (issue #17), and the step that unblocks #19 (muscle and feathers), #20 (textures) and #21 (the rig). Today the goose is 1,072 separate pieces, with each neck, wing and leg pushed into an egg-shaped body. I built a quick throwaway test that melts the soft parts into one closed skin and gives the neck a single root that forks into three. It ran in 5 seconds, with no holes in the surface. The pictures below come from that test, untextured. Your answers to the three choices below decide how I do the real build.",
     "hint": "Tap a step to see what it does and what it needs from you.",
     "key": [
       [
@@ -317,7 +317,7 @@ const PAGE = {
         "Checks",
         "Add a one-shell check to the validator",
         "",
-        "The existing checks still run on the new model: triangle budget, height, nothing below the floor and every piece closed. A new check counts the soft skin's separate pieces and refuses to export unless it is exactly one. The skin is capped at 75,000 triangles. The soft parts use 62,452 today, so the whole model lands near 285,000 of the 300,000 budget, which leaves #19 about 15,000 triangles. #19 can trim elsewhere if it needs more.",
+        "The existing checks still run on the new model: triangle budget, height, nothing below the floor and every piece closed. A new check counts the soft skin's separate pieces and refuses to export unless it is exactly one. The skin is capped at 75,000 triangles. The soft parts use 62,452 today, so the whole model lands near 285,000 of the 300,000 budget, which leaves about 15,000 triangles for #19 (muscle and feathers). #19 can trim elsewhere if it needs more.",
         "Nothing from you."
       ],
       [
@@ -421,10 +421,10 @@ const PAGE = {
           "B",
           "Cut and stitch the original surfaces",
           0,
-          "Keep each part's original surface and cut and stitch them where they cross. This keeps the version 1 surface layout away from the joins. With eight tubes it fails easily, and a stitched crease needs extra work to look like muscle."
+          "Keep each part's original surface and cut and stitch them where they cross. This keeps the version 1 surface layout everywhere except at the joins. With eight tubes meeting, the cutting and stitching fails easily, and a stitched crease needs extra work to look like muscle."
         ]
       ],
-      "I suggest option A (melt and smooth). The test already passed the closed-surface check, and #20 re-bakes the textures across the whole skin anyway, so losing the original surface layout costs nothing."
+      "I suggest option A (melt and smooth). The test already passed the closed-surface check, and #20 (textures) re-bakes the textures across the whole skin anyway, so losing the original surface layout costs nothing."
     ],
     [
       "fork",
