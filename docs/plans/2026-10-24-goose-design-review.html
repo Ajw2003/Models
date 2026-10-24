@@ -273,7 +273,7 @@ const PAGE = {
   "eyebrow": "Design review for approval · version 2 of the goose boss clips · nothing changed yet",
   "approval": "Design approved: goose design review",
   "short": {
-    "lead": "You asked for a senior game designer's view of the goose boss clips, for a Soulslike game with Canadian roots, and said The Crown Wakes looks flickery, like a seizure, rather than scary. I checked: The Crown Wakes fires 15 separate shudder bursts in its 12 seconds, each a shake at 5 per second for 0.3 s, and each crown growth snaps in 0.2 s. That fast, repeated shaking reads as malfunction, not menace. Below are eight recommendations with the reason for each, and six choices for which to act on.",
+    "lead": "You asked for a senior game designer's view of the goose boss clips, for a Soulslike game with Canadian roots, and said The Crown Wakes looks flickery, like a seizure, rather than scary. I checked: The Crown Wakes fires 15 separate shudder bursts in its 12 seconds, each a shake at 5 per second for 0.3 s, and each crown growth snaps in 0.2 s. That fast, repeated shaking reads as malfunction, not menace. Below are eight recommendations with the reason for each, and six questions that decide which ones to act on.",
     "hint": "Tap a step to see what it changes and why.",
     "key": [
       [
@@ -291,7 +291,7 @@ const PAGE = {
         "Crown Wakes",
         "Make the transition slow and wrong, not shaky",
         "",
-        "Cut the 15 shudder bursts. Horror comes from anticipation and wrongness: long stillness, then movement that is slow, heavy and in the wrong order. The main neck should rise one vertebra at a time like something being dragged upright; each crown should creak outward over 1 to 1.5 s with a single crack at the end rather than snapping in 0.2 s; the side heads should come up while the main head is still limp, as if they woke first. End on one long roar from the main head with the side heads joining late, instead of four roars 0.5 s apart.",
+        "Cut the 15 shudder bursts. Horror comes from anticipation and wrongness: long stillness, then movement that is slow, heavy and in the wrong order. The main neck should rise one vertebra at a time, like something being dragged upright. Each crown should creak outward over 1 to 1.5 s and end in a single crack, rather than snapping in 0.2 s. The side heads should come up while the main head is still limp, as if they woke first. End on one long roar from the main head with the side heads joining late, instead of four roars 0.5 s apart.",
         "Your choice on the first question under Choices."
       ],
       [
@@ -315,7 +315,7 @@ const PAGE = {
         "Stun",
         "Give the stun a clear target to punish",
         "",
-        "A stun window needs an obvious payoff. I recommend stun_fall drops the main head to the ground in front of the body, within a sword's reach of a player standing at its chest, so a critical strike has an obvious target, and stun_loop keeps it there while the side heads thrash weakly.",
+        "A stun window needs an obvious payoff. I recommend stun_fall drops the main head to the ground in front of the body, within a sword's reach of a player standing at its chest. That gives a critical strike an obvious target, and stun_loop keeps the head there while the side heads thrash weakly.",
         "Your choice on the fourth question."
       ],
       [
@@ -323,7 +323,7 @@ const PAGE = {
         "Goose tells",
         "Borrow real Canada goose threat behaviour as warnings",
         "",
-        "Real Canada geese warn before they attack: they pump their heads up and down, lower the neck and hiss with wings half-open, and strike with the bony wrist of the wing. Using those behaviours as the boss's warning signs (its \"tells\") gives the boss an identity no other boss has, and the honk is a ready-made audio cue. I recommend: head-pumping before the peck and lunge; the low-neck hiss before the charge; the wrist-strike shape in the wing gust; and, for sound later, a deep honk from the main head for big attacks and higher honks from the side heads for quick ones.",
+        "Real Canada geese warn before they attack: they pump their heads up and down, lower the neck and hiss with wings half-open, and strike with the bony wrist of the wing. Using those behaviours as the boss's warning signs (its \"tells\") gives the boss an identity no other boss has, and the honk is a ready-made audio cue. I recommend head-pumping before the peck and lunge, the low-neck hiss before the charge, and the wrist-strike shape in the wing gust. For sound later, the main head gives a deep honk before big attacks and the side heads higher honks before quick ones.",
         "Your choice on the fifth question."
       ],
       [
@@ -443,7 +443,7 @@ const PAGE = {
           "Each hit plays as its own whole clip and interrupts what the boss was doing."
         ]
       ],
-      "Option A stops fast weapons from locking the boss down and keeps the stun meaningful."
+      "Making the hit reactions partial (option A) stops fast weapons from locking the boss down and keeps the stun meaningful."
     ],
     [
       "stun",
