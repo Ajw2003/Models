@@ -539,6 +539,45 @@ def hackles(name, neck, count, length_range, rng):
     return parts
 
 
+def vertebrae(name, neck, chain, V):
+    """Version 2: ridge a neck tube at each vertebra, from chain["start"] of its length, and return a bone
+    spike per vertebra. Angle 0 is the back of the neck (the tube's ref side); see docs/4-systems/goose-build.md."""
+    sweep, R, S = neck["sweep"], V["ridge"], V["spike"]
+    path, count = sweep["path"], chain["count"]
+    travelled = [0.0]
+    for a, b in zip(path, path[1:]):
+        travelled.append(travelled[-1] + length(sub(b, a)))
+    total = travelled[-1]
+    start = chain["start"] * total
+    width = len(neck["rings"][0])
+    for i, ring in enumerate(neck["rings"]):
+        if travelled[i] < start:
+            continue
+        phase = (travelled[i] - start) / (total - start) * count % 1.0
+        joint = math.cos(math.pi * phase) ** 6
+        waist = math.sin(math.pi * phase) ** 2
+        ramp = min(1.0, (travelled[i] - start) / (0.08 * total))
+        centre = path[i]
+        for j, p in enumerate(ring):
+            a = 2 * math.pi * j / width
+            back = max(0.0, math.cos(a)) ** 6
+            side = (abs(math.sin(a)) * max(0.0, math.cos(a) + 0.35)) ** 4
+            swell = (R["joint"] * joint - R["waist"] * waist + R["back"] * back * joint + R["side"] * side * joint)
+            ring[j] = add(centre, mul(sub(p, centre), 1.0 + ramp * swell))
+    spikes = []
+    for k in range(count):
+        t = chain["start"] + (1 - chain["start"]) * (k + 0.5) / count
+        if t > S["last"]:  # the top vertebrae sit inside the head's hackles and jaw
+            continue
+        p, n, r = surface(neck, t, 0)
+        tangent = sweep["frames"][int(t * (len(path) - 1))][0]
+        size = S["length"] * r / S["per_radius"]
+        spikes.append(cone(f"{name}_vertebra{k}", add(p, mul(n, -0.04)),
+                           combine((p, 1), (n, size), (tangent, size * S["lean"])),
+                           S["width"] * r / S["per_radius"] + 0.015, "ToothBone"))
+    return spikes
+
+
 def build_necks(D, rng):
     parts = []
     main = tube("main_neck", D["main_neck"]["path"], D["main_neck"]["radii"], "GooseBlack",
@@ -546,7 +585,10 @@ def build_necks(D, rng):
     main["soak"] = 0.8  # blood run down from the jaws
     parts.append(main)
     parts += hackles("main_neck", main, 34, (0.32, 0.6), rng)
-    for k in range(13):  # bone ridge down the back of the neck
+    V = D.get("vertebrae")  # version 2 only: a ridge and a bone spike per vertebra replace the 13 spikes
+    if V:
+        parts += vertebrae("main_neck", main, V["main"], V)
+    for k in range(0 if V else 13):  # bone ridge down the back of the neck
         t = 0.10 + 0.78 * k / 12
         p, n, r = surface(main, t, 0)
         tangent = main["sweep"]["frames"][int(t * (len(main["sweep"]["path"]) - 1))][0]
@@ -563,6 +605,8 @@ def build_necks(D, rng):
         neck["soak"] = 0.78
         parts.append(neck)
         parts += hackles(f"side_neck_{tag}", neck, 18, (0.22, 0.42), rng)
+        if V:
+            parts += vertebrae(f"side_neck_{tag}", neck, V["side"], V)
         head = dict(D["side_head"])
         if sign < 0:
             head["base"] = mirror(head["base"])
