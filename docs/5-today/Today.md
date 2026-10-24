@@ -5,7 +5,11 @@ chose. A throwaway test (`docs/art/reviews/goose-v2-prototype/prototype_fuse.py`
 into one closed skin in about 5 seconds with 0 non-manifold edges. The build plan is
 `docs/plans/2026-10-24-goose-v2-skin.html`.
 
-**Next, in order:** aj approves the #18 build plan; build #18; then #19, #20 and #21.
+Built #18 (steps #22, #23, #24): `goose_v2` with one fused skin and the forking neck root; the
+one-shell check caught the wing arms stopping 0.1 m short of the body, so in version 2 they now
+reach into it. Review sheet: `docs/art/reviews/goose-v2-review.png`.
+
+**Next, in order:** aj reviews #18; then #19, #20 and #21.
 
 ---
 

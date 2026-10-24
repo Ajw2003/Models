@@ -1,7 +1,9 @@
 import bpy, bmesh, math, sys
 from mathutils import Vector
+# usage: python3.11 render_joins.py [--blend art/goose/goose_v2.blend] [--views] OUTDIR
 out=sys.argv[-1]
-bpy.ops.wm.open_mainfile(filepath="art/goose/goose.blend")
+blend=sys.argv[sys.argv.index("--blend")+1] if "--blend" in sys.argv else "art/goose/goose.blend"
+bpy.ops.wm.open_mainfile(filepath=blend)
 obj=[o for o in bpy.data.objects if o.type=='MESH'][0]
 bm=bmesh.new(); bm.from_mesh(obj.data); bm.verts.ensure_lookup_table()
 # count connected shells
@@ -28,3 +30,8 @@ shot("neck_base_side",(0,-1.2,3.0),(4.6,-1.6,3.3))
 shot("wing_root",(1.0,-0.6,2.6),(3.6,-3.4,3.2))
 shot("leg_hip",(0.5,0.1,1.3),(3.2,-2.4,1.2))
 shot("side_neck_join",(0.6,-1.2,3.6),(3.0,-3.8,4.4))
+if "--views" in sys.argv:  # whole-model views: front, side, three-quarter and back
+    shot("view_front",(0,0,3.2),(0,-17,3.4))
+    shot("view_side",(0,0,3.2),(17,0,3.4))
+    shot("view_three_quarter",(0,0,3.2),(11,-12.5,5.0))
+    shot("view_back",(0,0,3.2),(-6,15.5,4.0))

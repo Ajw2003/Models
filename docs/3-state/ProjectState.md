@@ -14,6 +14,16 @@
 - #9 rig with tongue bones: built and looked at, `docs/art/reviews/goose-rig-v2-review.png`. With the jaw wide open, the flat end of the original mouth tube shows; the mesh is unchanged, so it is left as built.
 - #10 to #13: not started.
 
+## Goose model version 2 (#17)
+
+- #18 one fused skin and a forking neck root: built, waits on aj's review. `python3.11
+  art/goose/build_goose.py --v2` gives 1,072 parts, 294,828 triangles (5,172 under the 300,000
+  budget), height 6.750 m, and a skin of 1 piece; the whole model is 1,064 closed pieces against
+  version 1's 1,071. Review sheet: `docs/art/reviews/goose-v2-review.png`. The join close-ups show
+  no seam lines; the colour still changes in a hard, ragged black-to-pale line across the breast,
+  which #20 replaces. Version 1's files are unchanged (`git status`).
+- #19, #20 and #21: not started; #19 has 5,172 triangles of headroom, so it has to trim elsewhere.
+
 ## The one thing that is not what it looks like
 
 Every clip passed its floor and loop checks and was looked at as 8 stills, but no person has watched
