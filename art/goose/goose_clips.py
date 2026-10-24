@@ -1149,7 +1149,7 @@ def shudder_pose(t, times, dur=0.3, neck_deg=3.5, wing_deg=3.0, chains=(NECK_MAI
 # --- death: collapse FORWARD onto the chest, wings splayed, necks flat in front, jaws slack, tongues out, then still
 DV_T = 5.6
 dv_c = envelope((0, 0), (0.45, 0), (1.3, 0.4), (1.95, 1.0), (2.4, 1.0))
-dv_a = curve((0, 0), (0.08, -0.1), (0.4, 0.8), (0.9, 0.4), (1.4, 0.1), (2.0, 0.0), (5.6, 0))
+dv_a = curve((0, 0), (0.08, -0.1), (0.4, 0.8), (0.9, 0.4), (1.4, 0.1), (2.0, 0.0), (2.2, 0.0), (2.6, 0.0), (5.6, 0))
 dv_neck = envelope((0, 0), (1.5, 0), (2.4, 1.0), (3.0, 1.0))
 dv_jaw = envelope((0, 0), (1.9, 0), (2.8, 1.0), (3.1, 1.0))
 dv_tongue = envelope((0, 0), (2.2, 0), (3.2, 1.0), (3.3, 1.0))
@@ -1176,20 +1176,22 @@ def death2_pose(rig, t, ks):
     for lab in ("main", "L", "R"):
         for i in (1, 2, 3):
             pose = add_pose(pose, {f"tongue_{lab}_{i}": {"rot": (30.0 * tf, 0, 0)}})
-    pose = add_pose(pose, shudder_pose(t, [2.0], dur=0.4))  # the impact
+    sh = shudder_pose(t, [2.0], dur=0.4)  # the impact
+    EFFORT_POSES.setdefault("death", []).append(sh)
+    pose = add_pose(pose, sh)
     return pose, planted(rig)
 
 
 # --- crown_wakes: dead-looking collapse, stillness and a twitch, side heads rise one at a time, the main head drags up
 # while the crowns crack and grow in three jolts, the wings slam the ground and spread, three roars and a roar together
 CW2_T = 12.0
-cw2_stagger = curve((0, 0), (0.1, -0.1), (0.4, 1.0), (0.8, 0.6), (1.5, 0.0), (12, 0))
+cw2_stagger = curve((0, 0), (0.1, -0.1), (0.4, 1.0), (0.8, 0.6), (1.5, 0.0), (1.7, 0.0), (2.2, 0.0), (12, 0))
 cw2_kneel = envelope((0, 0), (0.4, 0), (1.5, 1.0), (7.8, 1.0), (9.3, 0.12), (12, 0.12))
 cw2_main = envelope((0, 0), (0.6, 0), (1.5, 1.0), (5.5, 1.0), (6.2, 0.8), (6.5, 0.8), (7.0, 0.35), (7.2, 0.35), (7.8, 0.0), (12, 0))
 cw2_sideL = envelope((0, 0), (0.6, 0), (1.5, 1.0), (3.0, 1.0), (3.9, 0.0), (12, 0))
 cw2_sideR = envelope((0, 0), (0.6, 0), (1.5, 1.0), (4.3, 1.0), (5.2, 0.0), (12, 0))
 cw2_crown = curve((0, 1.0), (5.8, 1.0), (6.1, 1.22), (6.25, 1.17), (6.8, 1.17), (7.0, 1.40), (7.15, 1.33), (7.5, 1.33),
-                  (7.7, 1.58), (7.9, 1.5), (12, 1.5))
+                  (7.7, 1.58), (7.9, 1.5), (8.3, 1.5), (9.5, 1.5), (12, 1.5))
 cw2_wing = curve((0, 0), (1.5, -0.35), (7.8, -0.35), (8.25, 1.0), (8.5, 0.9), (9.1, 0.2), (9.5, 1.0), (11.7, 1.0), (12, 0.5))
 cw2_slam = envelope((0, 0), (8.3, 0), (8.6, 1.0), (8.9, 1.0), (9.2, 0))
 cw2_roar = {"L": envelope((9.4, 0), (9.7, 1), (10.05, 1), (10.3, 0)), "R": envelope((9.9, 0), (10.2, 1), (10.55, 1), (10.8, 0)),
@@ -1217,12 +1219,16 @@ def crown2_pose(rig, t, ks):
         for i in (1, 2, 3):  # tongues hang while limp, lash out with each roar
             pose = add_pose(pose, {f"tongue_{lab}_{i}": {"rot": (14.0 * limp + 8.0 * ro[lab], 0, 0)}})
     # shudders: the twitch, each side head as it rises, the three crown jolts, the wing slam, each roar
-    pose = add_pose(pose, shudder_pose(t, [2.5], dur=0.3, neck_deg=2.5))
-    pose = add_pose(pose, shudder_pose(t, [3.1, 3.5], dur=0.3, chains=(NECK_L,)))
-    pose = add_pose(pose, shudder_pose(t, [4.4, 4.8], dur=0.3, chains=(NECK_R,)))
-    pose = add_pose(pose, shudder_pose(t, [6.1, 7.0, 7.7], dur=0.3, chains=(NECK_MAIN,), wing_deg=0.0))
-    pose = add_pose(pose, shudder_pose(t, [8.6], dur=0.35, chains=(), wing_deg=3.0))
-    pose = add_pose(pose, shudder_pose(t, [9.7, 10.2, 10.7, 11.1], dur=0.3, neck_deg=3.0, wing_deg=2.0))
+    sh = {}
+    for part in (shudder_pose(t, [2.5], dur=0.3, neck_deg=2.5),
+                 shudder_pose(t, [3.1, 3.5], dur=0.3, chains=(NECK_L,)),
+                 shudder_pose(t, [4.4, 4.8], dur=0.3, chains=(NECK_R,)),
+                 shudder_pose(t, [6.1, 7.0, 7.7], dur=0.3, chains=(NECK_MAIN,), wing_deg=0.0),
+                 shudder_pose(t, [8.6], dur=0.35, chains=(), wing_deg=3.0),
+                 shudder_pose(t, [9.7, 10.2, 10.7, 11.1], dur=0.3, neck_deg=3.0, wing_deg=2.0)):
+        sh = add_pose(sh, part)
+    EFFORT_POSES.setdefault("crown_wakes", []).append(sh)
+    pose = add_pose(pose, sh)
     cr = cw2_crown(t)
     jolt = jab(t, [6.1, 7.0, 7.7], 0.06)
     for i, c in enumerate(CROWNS):
