@@ -63,3 +63,16 @@ Version 2 clips (20): idle, walk, turn_in_place; hesitation_peck, flapping_charg
 wing_gust, turning_tail_sweep, neck_lunge_grab, death_honk; death (falls forward, necks flat, jaws
 slack, tongues out); crown_wakes (12 s); stun_fall, stun_loop (loops), stun_get_up; hit_front,
 hit_left, hit_right, hit_heavy, hit_back (turns round to face the attacker, angrier).
+
+### Design review changes (approved 2026-10-24)
+
+- Tempo is split per phase of each attack: wind-up 1.6, strike 1.0 to 1.1, recovery 1.4 times
+  version 1. The strike shudder is one heavy shake, not a 5-per-second tremor.
+- Attacks gain goose tells: head-pumping before hesitation_peck and neck_lunge_grab, a low-neck hiss
+  with wings half-open before flapping_charge, the wing's wrist leading wing_gust. The main head
+  leads every big attack; the side heads follow up.
+- crown_wakes has no shudder bursts: stillness, the main neck rising bone by bone from the base,
+  side heads first, crowns growing over 1 to 1.5 s per stage with one crack, one long roar.
+- hit_front, hit_left, hit_right, hit_heavy and hit_back key only neck, head, jaw, tongue and wing
+  bones (the legs, pelvis and root are untouched), so the game plays them on top of any clip.
+- stun_fall ends, and stun_loop holds, with the main head on the ground in front of the chest.

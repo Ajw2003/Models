@@ -3,6 +3,40 @@
 The running log of what was decided in this repo, when and why. Newest entry at the top. Entries
 are never rewritten; a later decision flips an old entry's Status to Superseded with a pointer.
 
+## 2026-10-24 — Goose design review: slow dread, fast strikes, partial hits, goose tells
+
+**Context.** aj asked for a senior game designer's review of the version 2 goose clips for a
+Soulslike game with Canadian roots, and found The Crown Wakes flickery rather than scary. The review
+(`docs/plans/2026-10-24-goose-design-review.html`) counted 15 shudder bursts at 5 per second in The
+Crown Wakes and crowns snapping in 0.2 s, and noted that version 2's uniform 1.4 slow-down also
+slowed the strikes (charge 3.9 to 2.8 m/s).
+
+**Decision.** aj approved "Design approved: goose design review 1A 2A 3A 4A 5A 6A":
+
+- The Crown Wakes (question 1): option A, rebuilt slow, heavy and wrong: long stillness, the main
+  neck dragged up a vertebra at a time, side heads waking first, each crown creaking out over 1 to
+  1.5 s ending in one crack, one long roar with the side heads joining late. No shudder bursts.
+- Tempo (question 2): option A, wind-ups 1.6, strikes 1.0 to 1.1, recoveries 1.4 times version 1;
+  the strike shudder becomes one heavy shake.
+- Hits (question 3): option A, the five hit reactions move only necks, heads and wings with the legs
+  planted, so the game plays them on top of any clip.
+- Stun (question 4): option A, the main head lies on the ground in front, in reach for a critical
+  strike, through stun_fall and stun_loop.
+- Tells and head roles (question 5): option A, head-pumping before the peck and lunge, the low-neck
+  hiss before the charge, the wrist-strike wing in the gust; the main head leads big attacks and the
+  side heads follow up.
+- Phase two (question 6): option A, a separate phase-two moveset proposal after this round.
+
+This partly supersedes the 2026-10-21 version 2 decision: its uniform 1.4 tempo and its full-body
+hit reactions are replaced; everything else in it stands.
+
+**Why.** The review's reasoning: dread comes from stillness and wrong-looking slow motion; weight
+comes from wind-up and recovery while danger comes from a fast strike; full-body flinches make a
+boss look weak and lockable; a stun needs a clear target; real goose threat displays give the boss
+an identity of its own.
+
+**Status.** Standing.
+
 ## 2026-10-21 — Goose animation version 2 build plan approved
 
 **Context.** The version 2 design became a build plan of five issues under #8 (Goose animation
