@@ -3,6 +3,29 @@
 The running log of what was decided in this repo, when and why. Newest entry at the top. Entries
 are never rewritten; a later decision flips an old entry's Status to Superseded with a pointer.
 
+## 2026-10-24 — Goose v2 necks: vertebrae, bone spikes and a goose's S-curve
+
+**Context.** aj's QA check of #18 found that the version 2 necks still read as rigid, smooth tubes,
+and asked for necks that can move and show their vertebrae, like a real Canada goose's. A goose's
+neck has 17 to 18 vertebrae (Frontiers in Veterinary Science, 2025, doi 10.3389/fvets.2025.1531363).
+The proposal, with a throwaway test, is `docs/plans/2026-10-24-goose-v2-necks.html`.
+
+**Decision.** aj approved "Design approved: goose v2 necks 1B 2A 3A":
+
+- Vertebrae (question 1): option B, ridges under the skin plus one bone spike per vertebra along
+  the back, replacing the main neck's 13 spikes.
+- Shape (question 2): option A, each neck rests in an S-curve; the heads do not move.
+- Bending (question 3): option A, one rig bone per vertebra in #21: 15 on the main neck, 12 on
+  each side neck.
+
+The work is #25, with steps #26 and #27.
+
+**Why.** Ridges and an S-curve are what make a goose's neck read as jointed and flexible; aj chose
+the more monstrous exposed bone. One bone per vertebra lets every joint bend without stretching the
+ridges. Rejected: ridges alone; today's straight lines; keeping 7 and 6 bones.
+
+**Status.** Standing. It supersedes nothing; it adds to the 2026-10-24 goose v2 skin entry below.
+
 ## 2026-10-24 — Goose v2 skin (#18): melt and smooth, fork at 3.05 m, colours carried over
 
 **Context.** #18 (one fused skin and a forking neck root) is the first step of the version 2 goose

@@ -53,3 +53,9 @@ the heads keep version 1's positions. `goose_skin.py` (bpy) meshes the soft part
 nearest unfused face, mapping all its corners through that one face so a face across a part's
 wrap-around seam does not smear; this stand-in colour is replaced when #20 re-bakes. `build_goose.py
 --v2` adds the hard parts unchanged and refuses to export unless the skin is one piece.
+
+Necks (#25, design `docs/plans/2026-10-24-goose-v2-necks.html`, approved 1B 2A 3A): the v2 neck
+paths rest in an S-curve with the heads unmoved; a `v2.vertebrae` block sets 15 vertebrae on the
+main neck and 12 on each side neck, each a ridge under the skin (strongest along the back) with a
+bone spike tearing out of it, in place of version 1's 13 neck spikes. #21 rigs one bone per
+vertebra.
