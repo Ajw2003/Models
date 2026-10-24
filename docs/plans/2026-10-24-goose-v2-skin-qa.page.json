@@ -12,7 +12,7 @@
     ]
   },
   "short": {
-    "lead": "The version 2 goose is built. The body, the three necks, both wing arms and both legs are now one closed skin. One neck root rises from the chest and forks into three at about 3.05 m. The build checks these on every run: 294,828 triangles against the 300,000 budget, 6.750 m tall, and a skin of exactly 1 piece. Version 1's files are unchanged.",
+    "lead": "The version 2 goose is built. The body, the three necks, both wing arms and both legs are now one closed skin. One neck root rises from the chest and forks into three at 3.05 m (the root's top in spec.json). The build checks these on every run: 294,828 triangles against the 300,000 budget, 6.750 m tall, and a skin of exactly 1 piece. Version 1's files are unchanged.",
     "hint": "Tap a step to see what was checked and what it needs from you.",
     "key": [["Done", "done"], ["Needs you", "you"]],
     "items": [
