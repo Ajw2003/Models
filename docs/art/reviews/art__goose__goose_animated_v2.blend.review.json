@@ -1,0 +1,7 @@
+{
+  "model": "art/goose/goose_animated_v2.blend",
+  "sheet": "art/goose/clips_v2/death_sheet.png",
+  "verdict": "fail",
+  "seen": "Death rework sheet: legs give way and from 2.4 s the body lies flat on the floor, wings spread flat, heads down in front, still to the end; reads as a forward collapse now. The fall from standing to flat happens within 0.8 s and is not yet checked in motion. The blend still holds the flickery crown_wakes (15 shudder bursts) that aj rejected; its rework is issue #16, so the file as a whole does not pass yet.",
+  "date": "2026-10-24T01:43:00+0000"
+}

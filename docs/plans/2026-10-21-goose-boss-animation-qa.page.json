@@ -1,0 +1,38 @@
+{
+  "title": "Goose Boss Animation QA",
+  "eyebrow": "Ready for your check · pull request #7 · The Honking Deep (the goose boss)",
+  "qa": {
+    "feature": "goose boss animation 1* 2A 3A 4A",
+    "base": "origin/main",
+    "unverified": [
+      "No person has watched the MP4s; I and the builder judged each clip from its 8 stills",
+      "Nothing checks whether a neck or a wing passes through the body, so that was judged by eye only",
+      "The clips have only been re-imported into Blender, not played in a game engine, because you chose this repo only",
+      "The stills are low-sample renders (16 samples), so fine surface faults could be hidden"
+    ]
+  },
+  "short": {
+    "lead": "The goose boss is rigged and animated as you approved: 7 attacks, the Crown Wakes phase transition, and the 5 supporting clips, 13 clips in all. Everything is in pull request #7 (Animate the goose boss: 59-bone rig and 13 clips) on Ajw2003/models. Please watch the clips, then pass or fail the check.",
+    "hint": "Tap a step to see what to look at.",
+    "key": [["Done", "done"], ["You check it", "you"]],
+    "items": [
+      ["check", "Rig", "The 59-bone rig", "done", "A skeleton bound to the unchanged pass 19 mesh. The pose test bends the necks, a wing and a leg without tearing.", "Nothing. The rig review sheet in pull request #7 shows it.", {"src": "../art/reviews/goose-rig-review.png", "alt": "The rig pose-test review sheet", "caption": "Rig pose test: main neck turned, side neck curled, wing raised, knee lifted, crown at 1.5 times."}],
+      ["loop", "Supporting", "Idle, walk, turn, stagger, death", "done", "Idle and walk loop exactly. Death ends lying still.", "Nothing new.", {"src": "../../art/goose/clips/death_sheet.png", "alt": "Eight stills of the death clip", "caption": "Death: the legs buckle, it rolls onto its side and the necks fall last."}],
+      ["hammer", "Attacks", "Seven attacks", "done", "Hesitation Peck, Flapping Charge, Leap and Dive, Wing Gust, Turning Tail Sweep, Neck Lunge Grab and Death Honk. Each starts and ends at idle and carries a hit event.", "Nothing new.", {"src": "../../art/goose/clips/leap_and_dive_sheet.png", "alt": "Eight stills of the leap and dive clip", "caption": "Leap and Dive: crouch, a 3 m leap, dive, slam, recover."}],
+      ["eye", "Phase two", "The Crown Wakes", "done", "It kneels with the side heads slumped, then the main head snaps up, the crowns grow to 1.5 times, the wings spread and all three heads roar. It ends in the phase-two stance.", "Nothing new.", {"src": "../../art/goose/clips/crown_wakes_sheet.png", "alt": "Eight stills of the crown wakes clip", "caption": "The Crown Wakes, 6 seconds."}],
+      ["hand", "Your check", "Watch the clips and decide", "you", "Each clip has an MP4 in art/goose/clips/ in the pull request (for example art/goose/clips/crown_wakes.mp4). All 13 contact sheets are stacked in docs/art/reviews/goose-clips-review.png.", "Watch the MP4s, then send \"QA passed: goose boss animation 1* 2A 3A 4A\", or send \"QA failed: goose boss animation 1* 2A 3A 4A\" with what to change."]
+    ]
+  },
+  "changes": [
+    ["new", "art/goose/goose_anims.fbx", "The 13 clips as one animation-only file.", null, "Re-imported in Blender, it gives 13 takes of the right lengths and 59 bones. FBX drops the event markers, so art/goose/clips/manifest.json is the one record of the hit, release and roar times.", null, null],
+    ["new", "art/goose/build_rig.py and art/goose/goose_clips.py", "The scripts that build the rig, the clips, the metrics, the renders and the export.", null, "Rebuild by running python3.11 art/goose/build_rig.py, then python3.11 art/goose/goose_clips.py with each of build, render and export in turn. The commands and their measured times are in art/goose/README.md.", null, null],
+    ["keep", "Known flaws", "Six things that look weaker than the rest, or that nobody has checked.", null, "The turning tail sweep looks modest. The walk's body roll is small. In death, the crowns prop the heads slightly off the floor. Nothing checks whether a neck or wing passes through the body. The stills are low-sample (16 samples). No person has watched the MP4s.", null, null]
+  ],
+  "wrapup": {
+    "summary": "The goose is rigged with 59 bones and has all 13 approved clips, exported as one animation file with a manifest of its events.",
+    "changing": "Ajw2003/models gains the rig, the clips, the export, the review sheets and the documentation tiers, all in pull request #7.",
+    "blocking": "Nothing is blocked except your check of the clips.",
+    "next": "If you pass the check, you merge pull request #7. If you fail it, I fix what you name and ask you to check again.",
+    "todo": ["Watch the MP4s in art/goose/clips/ on pull request #7.", "Send \"QA passed: goose boss animation 1* 2A 3A 4A\", or \"QA failed\" with what to change."]
+  }
+}

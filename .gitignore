@@ -1,0 +1,6 @@
+# Claude Code session state: live agent worktrees and hook state, not project files
+.claude/worktrees/
+.claude/house-rules-loop.json
+# Python bytecode and Blender save backups, rewritten on every run
+__pycache__/
+*.blend1

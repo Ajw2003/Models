@@ -1,0 +1,242 @@
+{
+ "model": "goose_anims.fbx",
+ "armature": "goose_rig",
+ "fps": 30,
+ "bones": 59,
+ "units": "metres, +Z up, faces -Y in Blender",
+ "note": "Event times are also stored as pose markers on the Blender actions; the FBX does not carry them, so this file is the source of truth for events.",
+ "clips": [
+  {
+   "name": "idle",
+   "frames": 120,
+   "seconds": 4.0,
+   "fps": 30,
+   "loop": true,
+   "events": [],
+   "ends_in": "idle",
+   "root_motion": {
+    "kind": "none"
+   }
+  },
+  {
+   "name": "walk",
+   "frames": 48,
+   "seconds": 1.6,
+   "fps": 30,
+   "loop": true,
+   "events": [],
+   "ends_in": "idle",
+   "root_motion": {
+    "kind": "none"
+   },
+   "implied_ground_speed_mps": 0.625
+  },
+  {
+   "name": "turn_in_place",
+   "frames": 45,
+   "seconds": 1.5,
+   "fps": 30,
+   "loop": false,
+   "events": [],
+   "ends_in": "idle",
+   "root_motion": {
+    "kind": "yaw",
+    "degrees": -90,
+    "note": "root rotates about Z, 90 degrees to the right"
+   }
+  },
+  {
+   "name": "stagger",
+   "frames": 36,
+   "seconds": 1.2,
+   "fps": 30,
+   "loop": false,
+   "events": [],
+   "ends_in": "idle",
+   "root_motion": {
+    "kind": "none"
+   }
+  },
+  {
+   "name": "death",
+   "frames": 120,
+   "seconds": 4.0,
+   "fps": 30,
+   "loop": false,
+   "events": [],
+   "ends_in": "dead",
+   "root_motion": {
+    "kind": "none"
+   }
+  },
+  {
+   "name": "hesitation_peck",
+   "frames": 66,
+   "seconds": 2.2,
+   "fps": 30,
+   "loop": false,
+   "events": [
+    {
+     "name": "hit",
+     "normalised_time": 0.7424,
+     "frame": 49,
+     "time_s": 1.633
+    }
+   ],
+   "ends_in": "idle",
+   "root_motion": {
+    "kind": "none"
+   }
+  },
+  {
+   "name": "flapping_charge",
+   "frames": 75,
+   "seconds": 2.5,
+   "fps": 30,
+   "loop": false,
+   "events": [
+    {
+     "name": "hit",
+     "normalised_time": 0.6933,
+     "frame": 52,
+     "time_s": 1.733
+    }
+   ],
+   "ends_in": "idle",
+   "root_motion": {
+    "kind": "none"
+   },
+   "implied_ground_speed_mps": 3.889
+  },
+  {
+   "name": "leap_and_dive",
+   "frames": 90,
+   "seconds": 3.0,
+   "fps": 30,
+   "loop": false,
+   "events": [
+    {
+     "name": "hit",
+     "normalised_time": 0.6333,
+     "frame": 57,
+     "time_s": 1.9
+    }
+   ],
+   "ends_in": "idle",
+   "root_motion": {
+    "kind": "z",
+    "peak_m": 2.999,
+    "note": "root rises in Z; no x or y travel"
+   }
+  },
+  {
+   "name": "wing_gust",
+   "frames": 60,
+   "seconds": 2.0,
+   "fps": 30,
+   "loop": false,
+   "events": [
+    {
+     "name": "hit",
+     "normalised_time": 0.5,
+     "frame": 30,
+     "time_s": 1.0
+    }
+   ],
+   "ends_in": "idle",
+   "root_motion": {
+    "kind": "none"
+   }
+  },
+  {
+   "name": "turning_tail_sweep",
+   "frames": 72,
+   "seconds": 2.4,
+   "fps": 30,
+   "loop": false,
+   "events": [
+    {
+     "name": "hit",
+     "normalised_time": 0.4167,
+     "frame": 30,
+     "time_s": 1.0
+    }
+   ],
+   "ends_in": "idle",
+   "root_motion": {
+    "kind": "yaw",
+    "degrees": 360.0,
+    "note": "root rotates about Z, about 385 degrees in all from the wind-up (fast phase about 273), ends facing forward"
+   }
+  },
+  {
+   "name": "neck_lunge_grab",
+   "frames": 96,
+   "seconds": 3.2,
+   "fps": 30,
+   "loop": false,
+   "events": [
+    {
+     "name": "hit",
+     "normalised_time": 0.375,
+     "frame": 36,
+     "time_s": 1.2
+    },
+    {
+     "name": "release",
+     "normalised_time": 0.7396,
+     "frame": 71,
+     "time_s": 2.367
+    }
+   ],
+   "ends_in": "idle",
+   "root_motion": {
+    "kind": "none"
+   }
+  },
+  {
+   "name": "death_honk",
+   "frames": 78,
+   "seconds": 2.6,
+   "fps": 30,
+   "loop": false,
+   "events": [
+    {
+     "name": "hit",
+     "normalised_time": 0.3846,
+     "frame": 30,
+     "time_s": 1.0
+    }
+   ],
+   "ends_in": "idle",
+   "root_motion": {
+    "kind": "none"
+   }
+  },
+  {
+   "name": "crown_wakes",
+   "frames": 180,
+   "seconds": 6.0,
+   "fps": 30,
+   "loop": false,
+   "events": [
+    {
+     "name": "roar",
+     "normalised_time": 0.7333,
+     "frame": 132,
+     "time_s": 4.4
+    }
+   ],
+   "ends_in": "phase2_stance",
+   "root_motion": {
+    "kind": "none"
+   },
+   "end_pose_vs_idle_m": 1.327744,
+   "crown_scales_last_frame": {
+    "crown_main": 1.5,
+    "crown_L": 1.513,
+    "crown_R": 1.514
+   }
+  }
+ ]
+}

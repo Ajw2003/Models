@@ -1,0 +1,2042 @@
+#!/usr/bin/env python3
+"""The goose's supporting clips: idle, walk, turn_in_place, stagger, death, as Blender Actions.
+
+  python3.11 art/goose/goose_clips.py build            # goose_rigged.blend -> goose_animated.blend + clips/metrics.json
+  python3.11 art/goose/goose_clips.py render [CLIP..]  # per clip: 8-still contact sheet + MP4 under art/goose/clips/
+  python3.11 art/goose/goose_clips.py --v2 ...         # same commands on goose_rigged_v2.blend -> goose_animated_v2.blend,
+                                                       # goose_anims_v2.fbx, clips_v2/ (version 1 files are never touched)
+  python3.11 art/goose/goose_clips.py export           # goose_anims.fbx (13 takes, no mesh), clips/manifest.json, re-import check
+
+Loads goose_rigged.blend (mesh and rig untouched) and writes goose_animated.blend with five Actions
+(fake user set), 30 fps. A pose is a dict {bone: entry} where an entry is a dict of
+  rot   (rx, ry, rz) degrees about the WORLD axes through the bone's head, applied to the rest pose
+  t     (x, y, z) world translation in metres
+  aim   a world direction the bone is turned to point along (used for the leg IK)
+  scale uniform scale (crowns)
+World axes: +X is the goose's left, it faces -Y, +Z up. Rotation about X with a positive angle tips an
+upright bone forward and down; about Y it tips +X down; about Z it turns left (counter-clockwise).
+Legs are solved with a two-bone IK onto foot targets, so planted feet stay planted while the body
+moves; each pose is converted to local bone channels and keyed (Bezier, auto-clamped handles, which
+ease in and out), with extra keys placed for anticipation and overshoot.
+
+Clips (frame 0 is the first pose; loops end on a duplicate of frame 0):
+  idle           loop, 4.0 s: breathing, neck sway, crowns creaking, wings settling
+  walk           loop, 1.6 s, in place: the root never moves, planted feet slide backward at the
+                 implied ground speed (stride / stance time), which the metrics measure
+  turn_in_place  one-shot, 1.5 s: 90 degrees to the right (-X) with three/two stepping feet
+  stagger        one-shot, 1.2 s: recoil, heads reel back, recover to the idle pose
+  death          one-shot, 4.0 s: legs buckle, collapse onto its left side, necks fall last
+"""
+import json, math, os, sys, time
+
+try:
+    import bpy
+    import numpy as np
+    from mathutils import Matrix, Quaternion, Vector
+except ImportError:
+    sys.exit("goose_clips.py: cannot import bpy/numpy; run it with the interpreter from setup_bpy.sh")
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+# Version switch. With no flag everything is exactly as in version 1. With --v2 every input and output moves to
+# its _v2 name (goose_rigged_v2.blend in; goose_animated_v2.blend, goose_anims_v2.fbx and clips_v2/ out), so a
+# version 1 file can never be rebuilt or overwritten by a version 2 run.
+V2 = "--v2" in sys.argv
+ARGS = [a for a in sys.argv[1:] if a != "--v2"]
+SUFFIX = "_v2" if V2 else ""
+CLIPS_DIR = os.path.join(HERE, "clips_v2" if V2 else "clips")
+RIGGED, ANIMATED, FBX = f"goose_rigged{SUFFIX}.blend", f"goose_animated{SUFFIX}.blend", f"goose_anims{SUFFIX}.fbx"
+BONES_EXPECTED = 68 if V2 else 59
+FPS = 30
+FLOOR_TOL = 0.01
+UP = Vector((0, 0, 1))
+FWD = Vector((0, -1, 0))
+SLUG = "eldritch_goose"
+
+
+def die(msg):
+    sys.exit(f"goose_clips.py: {msg}")
+
+
+# ---------------------------------------------------------------- curves
+
+def pchip(points, t):
+    """Smooth monotone-ish curve through (time, value) points, flat at both ends (Catmull-Rom tangents)."""
+    ts = [p[0] for p in points]
+    vs = [p[1] for p in points]
+    if t <= ts[0]:
+        return vs[0]
+    if t >= ts[-1]:
+        return vs[-1]
+    i = max(k for k in range(len(ts) - 1) if ts[k] <= t)
+    h = ts[i + 1] - ts[i]
+
+    def tangent(k):
+        if k == 0 or k == len(ts) - 1:
+            return 0.0
+        m = (vs[k + 1] - vs[k - 1]) / (ts[k + 1] - ts[k - 1])
+        return m
+
+    u = (t - ts[i]) / h
+    h00, h10, h01, h11 = 2 * u**3 - 3 * u**2 + 1, u**3 - 2 * u**2 + u, -2 * u**3 + 3 * u**2, u**3 - u**2
+    return h00 * vs[i] + h10 * h * tangent(i) + h01 * vs[i + 1] + h11 * h * tangent(i + 1)
+
+
+def smooth(x):
+    x = min(1.0, max(0.0, x))
+    return x * x * (3 - 2 * x)
+
+
+# ---------------------------------------------------------------- pose arithmetic
+
+def P(**kw):
+    return kw
+
+
+def add_pose(a, b, w=1.0):
+    """a + w * b over rot / t / scale entries."""
+    out = {k: dict(v) for k, v in a.items()}
+    for bone, e in b.items():
+        o = out.setdefault(bone, {})
+        for key in ("rot", "t", "brot"):
+            if key in e:
+                cur = o.get(key, (0.0, 0.0, 0.0))
+                o[key] = tuple(c + w * x for c, x in zip(cur, e[key]))
+        if "scale" in e:
+            o["scale"] = o.get("scale", 1.0) + w * (e["scale"] - 1.0)
+    return out
+
+
+def side_sign(side):
+    return 1 if side == "L" else -1  # .L is +X
+
+
+# ---------------------------------------------------------------- the rig in Blender
+
+class Rig:
+    def __init__(self, path):
+        bpy.ops.wm.open_mainfile(filepath=path)
+        self.arm = bpy.data.objects["goose_rig"]
+        self.obj = bpy.data.objects[SLUG]
+        self.mod = [m for m in self.obj.modifiers if m.type == "ARMATURE"][0]
+        self.names = [b.name for b in self.arm.data.bones]  # parents before children
+        bpy.context.view_layer.objects.active = self.arm
+        bpy.ops.object.mode_set(mode="POSE")
+        for pb in self.arm.pose.bones:
+            pb.rotation_mode = "QUATERNION"
+        self.len = {b.name: b.length for b in self.arm.data.bones}
+        self.mod.show_viewport = False  # posing is cheap while the mesh does not follow
+        self.reset()
+        self.rest_hip = {s: self.arm.pose.bones[f"leg_thigh.{s}"].head.copy() for s in "LR"}
+        self.rest_foot = {s: self.arm.pose.bones[f"leg_toes.{s}"].head.copy() for s in "LR"}
+
+    def update(self):
+        bpy.context.view_layer.update()
+
+    def reset(self):
+        for pb in self.arm.pose.bones:
+            pb.location = (0, 0, 0)
+            pb.rotation_quaternion = (1, 0, 0, 0)
+            pb.scale = (1, 1, 1)
+        self.update()
+
+    def apply_entry(self, name, e):
+        pb = self.arm.pose.bones[name]
+        head = pb.head.copy()
+        M = Matrix.Identity(4)
+        if "aim" in e:
+            cur = (pb.tail - pb.head).normalized()
+            q = cur.rotation_difference(Vector(e["aim"]).normalized())
+            M = Matrix.Translation(head) @ q.to_matrix().to_4x4() @ Matrix.Translation(-head)
+        if "orient" in e:  # full world orientation relative to the rest bone, so roll is controlled too
+            rest3 = self.arm.data.bones[name].matrix_local.to_3x3()
+            cur3 = pb.matrix.to_3x3().normalized()
+            delta = (e["orient"] @ rest3) @ cur3.inverted()
+            M = Matrix.Translation(head) @ delta.to_4x4() @ Matrix.Translation(-head)
+        if "brot" in e:  # rotation about the BODY's axes (the pelvis frame), e.g. to fold a wing on a body lying on its side
+            rx, ry, rz = (math.radians(a) for a in e["brot"])
+            R = Matrix.Rotation(rz, 3, "Z") @ Matrix.Rotation(ry, 3, "Y") @ Matrix.Rotation(rx, 3, "X")
+            B = self.body_matrix().to_3x3().normalized()
+            M = Matrix.Translation(head) @ (B @ R @ B.inverted()).to_4x4() @ Matrix.Translation(-head) @ M
+        if "rot" in e:
+            rx, ry, rz = (math.radians(a) for a in e["rot"])
+            R = Matrix.Rotation(rz, 4, "Z") @ Matrix.Rotation(ry, 4, "Y") @ Matrix.Rotation(rx, 4, "X")
+            M = Matrix.Translation(head) @ R @ Matrix.Translation(-head) @ M
+        if "t" in e:
+            M = Matrix.Translation(Vector(e["t"])) @ M
+        pb.matrix = M @ pb.matrix
+        if "scale" in e:
+            s = e["scale"]
+            pb.scale = (s, s, s)
+        self.update()
+
+    def apply_pose(self, pose, legs=None):
+        self.reset()
+        for n in self.names:
+            if n in pose:
+                self.apply_entry(n, pose[n])
+        if legs:
+            aims = legs(self)
+            for n in self.names:
+                if n in aims:
+                    self.apply_entry(n, aims[n])
+
+    def channels(self):
+        return {pb.name: (tuple(pb.location), tuple(pb.rotation_quaternion), tuple(pb.scale))
+                for pb in self.arm.pose.bones}
+
+    def body_matrix(self):
+        """Rigid motion of the body relative to rest: the pelvis bone's pose matrix times the inverse of its rest."""
+        b = self.arm.data.bones["pelvis"]
+        rest = self.arm.matrix_world @ b.matrix_local
+        return self.arm.pose.bones["pelvis"].matrix @ rest.inverted()
+
+    def min_z(self, body_only=False, core=False, trunk=False):
+        self.mod.show_viewport = True
+        dg = bpy.context.evaluated_depsgraph_get()
+        ev = self.obj.evaluated_get(dg)
+        m = ev.to_mesh()
+        co = np.empty(len(m.vertices) * 3)
+        m.vertices.foreach_get("co", co)
+        ev.to_mesh_clear()
+        self.mod.show_viewport = False
+        z = co[2::3]
+        if trunk:  # the trunk only: no legs, wings, necks, heads, jaws, crowns or tongues
+            if not hasattr(self, "_trunk_mask"):
+                names = [g.name for g in self.obj.vertex_groups]
+                skip = ("neck_", "head_", "jaw_", "crown_", "tongue_", "wing_", "leg_")
+                self._trunk_mask = np.array([not names[max(v.groups, key=lambda g: g.weight).group].startswith(skip)
+                                             for v in self.obj.data.vertices])
+            return float(z[self._trunk_mask].min())
+        if core:  # the trunk and legs only: no wings, necks, heads, jaws, crowns or tongues
+            if not hasattr(self, "_core_mask"):
+                names = [g.name for g in self.obj.vertex_groups]
+                skip = ("neck_", "head_", "jaw_", "crown_", "tongue_", "wing_")
+                self._core_mask = np.array([not names[max(v.groups, key=lambda g: g.weight).group].startswith(skip)
+                                            for v in self.obj.data.vertices])
+            return float(z[self._core_mask].min())
+        if body_only:  # everything except the three necks, heads, jaws and crowns
+            if not hasattr(self, "_body_mask"):
+                names = [g.name for g in self.obj.vertex_groups]
+                skip = ("neck_", "head_", "jaw_", "crown_")
+                self._body_mask = np.array([not names[max(v.groups, key=lambda g: g.weight).group].startswith(skip)
+                                            for v in self.obj.data.vertices])
+            z = z[self._body_mask]
+        return float(z.min())
+
+    # --- two-bone leg IK onto a foot target
+    def leg_aims(self, side, foot, facing, phi_deg=10.0, toe_deg=7.0):
+        th = self.arm.pose.bones[f"leg_thigh.{side}"]
+        hip = th.head.copy()
+        L1, L2, Lt = self.len[f"leg_thigh.{side}"], self.len[f"leg_shin.{side}"], self.len[f"leg_tarsus.{side}"]
+        phi = math.radians(phi_deg)
+        tvec = (facing * math.sin(phi) - UP * math.cos(phi)) * Lt
+        ankle = Vector(foot) - tvec
+        d = ankle - hip
+        dist = d.length
+        reach = L1 + L2 - 1e-3
+        err = max(0.0, dist - reach)
+        dist = min(max(dist, abs(L1 - L2) + 1e-3), reach)
+        e = d.normalized()
+        a = (L1 * L1 - L2 * L2 + dist * dist) / (2 * dist)
+        h = math.sqrt(max(L1 * L1 - a * a, 0.0))
+        n = facing - e * facing.dot(e)
+        n = n.normalized() if n.length > 1e-6 else facing
+        knee = hip + e * a + n * h
+        ankle = hip + e * dist
+        tp = math.radians(toe_deg)
+        self.reach_err = max(getattr(self, "reach_err", 0.0), err)
+        return {f"leg_thigh.{side}": {"aim": tuple(knee - hip)},
+                f"leg_shin.{side}": {"aim": tuple(ankle - knee)},
+                f"leg_tarsus.{side}": {"aim": tuple(tvec)},
+                f"leg_toes.{side}": {"orient": Matrix.Rotation(tp - math.radians(7.0), 3, UP.cross(facing))
+                                     @ Matrix.Rotation(math.atan2(facing.x, -facing.y), 3, "Z")}}
+
+
+def planted(rig, facing=FWD, foot_override=None):
+    """Legs callback: both feet planted where they stand at rest (or at foot_override[side])."""
+    def legs(r):
+        out = {}
+        for s in "LR":
+            f = foot_override[s] if foot_override and s in foot_override else r.rest_foot[s]
+            out.update(r.leg_aims(s, f, facing))
+        return out
+    return legs
+
+
+# ---------------------------------------------------------------- the pose library (named poses)
+
+NECK_MAIN = [f"neck_main_{i}" for i in range(1, 8)]
+NECK_L = [f"neck_L_{i}" for i in range(1, 7)]
+NECK_R = [f"neck_R_{i}" for i in range(1, 7)]
+HEADS = ["head_main", "head_L", "head_R"]
+JAWS = ["jaw_main", "jaw_L", "jaw_R"]
+CROWNS = ["crown_main", "crown_L", "crown_R"]
+NECKS = {"main": NECK_MAIN, "L": NECK_L, "R": NECK_R}
+WING = ["wing_shoulder", "wing_upper", "wing_fore", "wing_hand"]
+
+
+def neck_pose(chain, x=0.0, y=0.0, z=0.0, head=None):
+    """Spread (x, y, z) world-axis degrees evenly over a neck chain, optionally extra on its head bone."""
+    out = {n: {"rot": (x / len(chain), y / len(chain), z / len(chain))} for n in chain}
+    return out
+
+
+def wing_pose(side, lower=0.0, sweep=0.0, fore=0.0, hand=0.0):
+    """Lower the wing (degrees), sweep it back about Z, and bend fore / hand further."""
+    s = side_sign(side)
+    return {f"wing_shoulder.{side}": {"rot": (0, s * lower, s * sweep)},
+            f"wing_fore.{side}": {"rot": (0, s * fore, s * fore * 0.5 * 0 + 0)},
+            f"wing_hand.{side}": {"rot": (0, s * hand, 0)}}
+
+
+# recoil: the hit snaps the body back and throws every head back
+RECOIL = {"root": {"rot": (-6, 0, 0)}, "pelvis": {"t": (0, 0.22, -0.10)},
+          "spine_3": {"rot": (-4, 0, 0)}}
+for _k, _chain in NECKS.items():
+    RECOIL = add_pose(RECOIL, neck_pose(_chain, x=-62 if _k == "main" else -54))
+for _h in HEADS:
+    RECOIL = add_pose(RECOIL, {_h: {"rot": (-14, 0, 0)}})
+for _j in JAWS:
+    RECOIL = add_pose(RECOIL, {_j: {"rot": (12, 0, 0)}})
+for _s in "LR":
+    RECOIL = add_pose(RECOIL, wing_pose(_s, lower=-14, hand=-6))
+RECOIL = add_pose(RECOIL, {"crown_main": {"scale": 1.12}, "crown_L": {"scale": 1.12}, "crown_R": {"scale": 1.12}})
+
+
+# ---------------------------------------------------------------- clips: pose as a function of time
+
+def idle_pose(t, T=4.0):
+    s = t / T
+    w = 2 * math.pi * s
+    p = {"pelvis": {"t": (0, 0, 0.018 * math.sin(2 * w))},
+         "spine_2": {"rot": (1.0 * math.sin(2 * w), 0, 0)},
+         "spine_3": {"rot": (1.5 * math.sin(2 * w - 0.4), 0, 0)}}
+    for i, n in enumerate(NECK_MAIN):
+        p[n] = {"rot": (1.0 * math.sin(w + 0.28 * i), 0, 1.7 * math.sin(w + 0.28 * i + 1.3))}
+    for i, n in enumerate(NECK_L):
+        p[n] = {"rot": (1.3 * math.sin(w + 0.3 * i + 1.0), 0, 2.0 * math.sin(w + 0.3 * i + 2.5))}
+    for i, n in enumerate(NECK_R):
+        p[n] = {"rot": (1.3 * math.sin(w + 0.3 * i + 3.0), 0, 2.0 * math.sin(w + 0.3 * i + 4.1))}
+    for k, (h, j) in enumerate(zip(HEADS, JAWS)):
+        p[h] = {"rot": (2.5 * math.sin(w + 0.9 * k + 0.6), 0, 0)}
+        p[j] = {"rot": (2.0 + 1.5 * math.sin(2 * w + k), 0, 0)}
+    for k, c in enumerate(CROWNS):  # creaking: slow twist, a touch of growth
+        p[c] = {"rot": (0, 2.0 * math.sin(2 * w + 1.7 * k), 2.5 * math.sin(2 * w + 1.7 * k + 0.8)),
+                "scale": 1.0 + 0.015 * math.sin(2 * w + k)}
+    for s in "LR":  # wings settling: a slow droop and lift with the fore and hand trailing
+        sg = side_sign(s)
+        p[f"wing_shoulder.{s}"] = {"rot": (0, sg * 3.0 * math.sin(w + 0.4 * (s == "R")), 0)}
+        p[f"wing_upper.{s}"] = {"rot": (0, sg * 2.0 * math.sin(w - 0.5 + 0.4 * (s == "R")), 0)}
+        p[f"wing_fore.{s}"] = {"rot": (0, sg * 2.5 * math.sin(w - 1.0 + 0.4 * (s == "R")), 0)}
+        p[f"wing_hand.{s}"] = {"rot": (0, sg * 3.0 * math.sin(w - 1.5 + 0.4 * (s == "R")), 0)}
+    return p
+
+
+WALK_T = 1.6
+WALK_STRIDE = 0.6
+WALK_DUTY = 0.6
+WALK_DROP = 0.12
+CLIP_LIST = (("idle", True), ("walk", True), ("turn_in_place", False), ("stagger", False), ("death", False),
+             ("hesitation_peck", False), ("flapping_charge", False), ("leap_and_dive", False), ("wing_gust", False),
+             ("turning_tail_sweep", False), ("neck_lunge_grab", False), ("death_honk", False), ("crown_wakes", False))
+WALK_REST_FOOT = {}
+WALK_GROUND_SPEED = WALK_STRIDE / (WALK_DUTY * WALK_T)  # m/s the planted foot slides backward
+
+
+def walk_body(t):
+    p = (t / WALK_T) % 1.0
+    w = 2 * math.pi * p
+    body = {"pelvis": {"t": (0.07 * math.sin(w), 0, -WALK_DROP + 0.03 * math.cos(2 * w)),
+                       "rot": (0, 3.5 * math.sin(w), 0)},
+            "spine_1": {"rot": (0, 0, 2.5 * math.sin(w))},
+            "spine_3": {"rot": (0, -2.0 * math.sin(w), 0)}}
+    for i, n in enumerate(NECK_MAIN):  # the neck bobs against the body and the head stays steady
+        body[n] = {"rot": (1.3 * math.sin(2 * w + 0.4 + 0.2 * i), 0, 0.9 * math.sin(w + 0.3 * i))}
+    for i, n in enumerate(NECK_L):
+        body[n] = {"rot": (1.7 * math.sin(2 * w + 0.9 + 0.25 * i), 0, 1.6 * math.sin(w + 1.2 + 0.3 * i))}
+    for i, n in enumerate(NECK_R):
+        body[n] = {"rot": (1.7 * math.sin(2 * w + 1.5 + 0.25 * i), 0, 1.6 * math.sin(w + 3.2 + 0.3 * i))}
+    for k, h in enumerate(HEADS):
+        body[h] = {"rot": (-3.0 * math.sin(2 * w + 0.6 + k), 0, 0)}
+    for s in "LR":
+        sg = side_sign(s)
+        body[f"wing_shoulder.{s}"] = {"rot": (0, sg * 2.5 * math.sin(2 * w + 0.5), 0)}
+        body[f"wing_fore.{s}"] = {"rot": (0, sg * 3.0 * math.sin(2 * w - 0.3), 0)}
+    for k, c in enumerate(CROWNS):
+        body[c] = {"rot": (0, 0, 2.0 * math.sin(2 * w + k))}
+    return body
+
+
+def walk_foot(side, t):
+    """World foot target for the walk: stance slides back at the ground speed, swing arcs forward."""
+    p = ((t / WALK_T) + (0.0 if side == "L" else 0.5)) % 1.0
+    f0 = Vector(WALK_REST_FOOT[side])
+    half = WALK_STRIDE / 2
+    if p < WALK_DUTY:
+        u = half - WALK_STRIDE * (p / WALK_DUTY)  # forward offset (metres, + is forward = -Y)
+        lift = 0.0
+    else:
+        q = (p - WALK_DUTY) / (1 - WALK_DUTY)
+        u = -half + WALK_STRIDE * smooth(q)
+        lift = 0.34 * math.sin(math.pi * q) ** 1.2
+    toe = 7.0 if p < WALK_DUTY else 7.0 - 20.0 * math.sin(math.pi * ((p - WALK_DUTY) / (1 - WALK_DUTY)))
+    return Vector((f0.x, f0.y - u, f0.z + lift)), toe
+
+
+def stagger_pose(t):
+    a = pchip([(0, 0), (0.05, -0.1), (0.2, 1.0), (0.45, 0.85), (0.8, -0.12), (1.0, 0.03), (1.2, 0)], t)
+    return add_pose(idle_pose(0.0), RECOIL, a)
+
+
+# turn: yaw of the root over time (degrees, negative is to the right, toward -X), with wind-up and overshoot
+TURN_T = 1.5
+YAW_KEYS = [(0, 0), (0.18, 5), (0.45, -22), (1.0, -75), (1.3, -93), (1.5, -90)]
+STEPS = {"L": [(0.05, 0.35, -25), (0.65, 0.95, -60), (1.25, 1.5, -90)],
+         "R": [(0.35, 0.65, -45), (0.95, 1.25, -90)]}
+
+
+def yaw_at(t):
+    return pchip(YAW_KEYS, t)
+
+
+def turn_foot(rig, side, t):
+    f0 = rig.rest_foot[side]
+    def at(yaw):
+        return Matrix.Rotation(math.radians(yaw), 4, "Z") @ f0
+    pos_yaw, prev = 0.0, (at(0.0), 0.0)
+    cur = (at(0.0), 0.0)
+    for (a, b, land) in STEPS[side]:
+        if t < a:
+            break
+        if t >= b:
+            cur = (at(land), land)
+            continue
+        q = (t - a) / (b - a)
+        start = cur
+        end = at(land)
+        pos = start[0].lerp(end, smooth(q))
+        yaw = start[1] + (land - start[1]) * smooth(q)
+        pos.z += 0.34 * math.sin(math.pi * q) ** 1.2
+        return pos, yaw, 7.0 - 20.0 * math.sin(math.pi * q)
+    return cur[0], cur[1], 7.0
+
+
+def turn_body(t):
+    yaw = yaw_at(t)
+    lead = (yaw_at(min(t + 0.15, TURN_T)) - yaw)
+    body = {"root": {"rot": (0, 0, yaw)}, "pelvis": {"t": (0, 0, -0.10 + 0.02 * math.sin(2 * math.pi * t / 0.6))}}
+    for n in NECK_MAIN:
+        body[n] = {"rot": (0, 0, lead * 0.55 / 7)}
+    for chain in (NECK_L, NECK_R):
+        for n in chain:
+            body[n] = {"rot": (0, 0, lead * 0.8 / 6)}
+    return add_pose(body, idle_pose(t * 0.0 + 0.0), 0.0)
+
+
+L_FORWARD, L_ACROSS = 0.0, 60.0  # how the neck that ends underneath is laid out before the roll (degrees)
+DEATH_T = 4.0
+T_BUCKLE, T_ROLL, T_NECKS = 0.35, 1.4, 2.2
+
+
+def death_body(t, rig, neck_scale=1.0):
+    """Body pose for the death at time t (without the floor fit)."""
+    base = idle_pose(0.0)
+    a_recoil = pchip([(0, 0), (0.06, -0.1), (0.3, 0.8), (0.9, 0.35), (1.4, 0.1)], t)
+    drop = pchip([(0, 0), (0.35, 0), (0.9, 0.55), (1.2, 0.85), (1.4, 0.9)], t)
+    pose = add_pose(base, RECOIL, a_recoil)
+    pose = add_pose(pose, {"pelvis": {"t": (0, 0, -drop), "rot": (0, 0, 0)}})
+    roll = pchip([(0, 0), (1.4, 0), (1.9, 28), (2.4, 84), (2.65, 94), (3.0, 90)], t)
+    pitch = pchip([(0, 0), (1.2, 6), (1.4, 8), (3.0, 8)], t)
+    pose = add_pose(pose, {"root": {"rot": (pitch * 0.3, roll, 0)}})
+    # wings fold back along the flanks as it goes down
+    fold = smooth((t - 0.9) / 1.2)
+    for s in "LR":
+        sg = side_sign(s)
+        pose = add_pose(pose, {f"wing_shoulder.{s}": {"brot": (0, sg * 25 * fold, sg * 80 * fold)},
+                               f"wing_upper.{s}": {"brot": (0, 0, sg * 10 * fold)},
+                               f"wing_fore.{s}": {"brot": (0, 0, sg * 40 * fold)},
+                               f"wing_hand.{s}": {"brot": (0, 0, sg * 70 * fold)}})
+    # necks fall last: bend toward the floor (world Y once it lies on its side)
+    fall = pchip([(0, 0), (T_NECKS, 0), (2.9, 0.75), (3.4, 1.05), (3.8, 1.0), (4.0, 1.0)], t) * neck_scale
+    for k, chain in NECKS.items():
+        amt = (70 if k == "main" else 62) * fall
+        if k == "L":  # the +X neck ends up underneath: lay it forward along the floor before the roll, not beneath the body
+            ahead = smooth((t - 0.7) / 0.9)
+            pose = add_pose(pose, {n: {"brot": (L_FORWARD * ahead / len(chain), 0, 0)} for n in chain})
+            amt = -L_ACROSS * ahead
+        pose = add_pose(pose, {n: {"brot": (0, amt / len(chain), 0)} for n in chain})
+    for h in HEADS:
+        pose = add_pose(pose, {h: {"brot": (0, 12 * fall, 0)}})
+    for j in JAWS:
+        pose = add_pose(pose, {j: {"brot": (14 * fall, 0, 0)}})
+    return pose
+
+
+# ---------------------------------------------------------------- building actions
+
+def solve_clip(rig, name):
+    """List of (frame, channels) for a clip; the clip's per-frame pose callbacks live here."""
+    keys = []
+    if name == "idle":
+        n, step = 120, 5
+        for f in range(0, n + 1, step):
+            t = (f % n) / FPS
+            rig.apply_pose(idle_pose(t), planted(rig))
+            keys.append((f, rig.channels()))
+    elif name == "walk":
+        n, step = int(round(WALK_T * FPS)), 1
+        WALK_REST_FOOT.update({s: tuple(rig.rest_foot[s]) for s in "LR"})
+        for f in range(0, n + 1, step):
+            t = (f % n) / FPS
+
+            def legs(r, t=t):
+                out = {}
+                for s in "LR":
+                    foot, toe = walk_foot(s, t)
+                    out.update(r.leg_aims(s, foot, FWD, toe_deg=toe))
+                return out
+            rig.apply_pose(walk_body(t), legs)
+            keys.append((f, rig.channels()))
+    elif name == "turn_in_place":
+        n = int(round(TURN_T * FPS))
+        for f in range(0, n + 1):
+            t = f / FPS
+
+            def legs(r, t=t):
+                out = {}
+                for s in "LR":
+                    foot, yaw, toe = turn_foot(r, s, t)
+                    facing = Matrix.Rotation(math.radians(yaw), 3, "Z") @ FWD
+                    out.update(r.leg_aims(s, foot, facing, toe_deg=toe))
+                return out
+            rig.apply_pose(turn_body(t), legs)
+            keys.append((f, rig.channels()))
+    elif name == "stagger":
+        n = int(round(1.2 * FPS))
+        for f in range(0, n + 1, 2):
+            rig.apply_pose(stagger_pose(f / FPS), planted(rig))
+            keys.append((f, rig.channels()))
+    elif name == "death":
+        n = int(round(DEATH_T * FPS))
+        attach = {}
+
+        def pose_it(body, t):
+            """Apply a death pose: feet planted until the roll starts, then riding with the body."""
+            if t <= T_ROLL:
+                rig.apply_pose(body, planted(rig))
+            else:
+                rig.apply_pose(body)
+                mb = rig.body_matrix()
+                rig.apply_pose(body, planted(rig, FWD, {s: mb @ attach[s] for s in "LR"}))
+
+        for f in range(0, n + 1):
+            t = f / FPS
+            if (f + 1) / FPS > T_ROLL and not attach:  # last planted frame: remember the feet relative to the body
+                rig.apply_pose(death_body(t, rig, 0.0), planted(rig))
+                mb = rig.body_matrix().inverted()
+                attach = {s: mb @ rig.rest_foot[s] for s in "LR"}
+            # floor fit 1: lift the root until the body (necks held up) is clear of the floor
+            body = death_body(t, rig, 0.0)
+            pose_it(body, t)
+            z = rig.min_z(body_only=True)
+            lift = -z + 0.004 if z < 0.004 else 0.0
+            # floor fit 2: let the necks fall as far as the floor allows (the heads rest on it), at most the full fall
+            lo, hi = 0.0, 1.0
+            for _ in range(9):
+                mid = (lo + hi) / 2
+                trial = add_pose(death_body(t, rig, mid), {"root": {"t": (0, 0, lift)}})
+                pose_it(trial, t)
+                if rig.min_z() >= 0.002:
+                    lo = mid
+                else:
+                    hi = mid
+            body = add_pose(death_body(t, rig, lo), {"root": {"t": (0, 0, lift)}})
+            pose_it(body, t)
+            keys.append((f, rig.channels()))
+        keys[-1] = (n, keys[-1][1])
+    elif name in ATTACKS:
+        keys = solve_attack(rig, name)
+    else:
+        die(f"unknown clip {name}")
+    return keys
+
+
+# ---------------------------------------------------------------- attack group one
+# Every attack is idle frame 0 plus weighted offsets that are all zero at the first and last frame, with feet
+# planted by IK (or stepping / airborne where the attack says so). pose_fn(rig, t, k) -> (pose, legs callback);
+# k in [0, 1] scales the part of the pose that can hit the floor (the strike), so it can be backed off until
+# nothing is below the floor (the heads then rest on the ground instead of sinking into it).
+
+ATTACKS = {}
+
+
+def curve(*pts):
+    return lambda t: pchip(list(pts), t)
+
+
+def envelope(*pts):
+    """Like curve, but held inside 0..1: the smooth curve overshoots flat plateaus (it once scaled the charge's
+    stride by 1.19 and so made the planted feet slide 15% too fast), and an envelope must not."""
+    return lambda t: min(1.0, max(0.0, pchip(list(pts), t)))
+
+
+def trio(pose, chain_main, chain_l, chain_r, main, side, head_main=0.0, head_side=0.0):
+    """Add a bend (degrees about X, positive is forward and down) to all three necks and heads."""
+    pose = add_pose(pose, neck_pose(NECK_MAIN, x=main))
+    pose = add_pose(pose, neck_pose(NECK_L, x=side))
+    pose = add_pose(pose, neck_pose(NECK_R, x=side))
+    pose = add_pose(pose, {"head_main": {"rot": (head_main, 0, 0)}, "head_L": {"rot": (head_side, 0, 0)},
+                           "head_R": {"rot": (head_side, 0, 0)}})
+    return pose
+
+
+def step_target(rig, side, p, stride, duty, lift):
+    f0 = rig.rest_foot[side]
+    half = stride / 2
+    if p < duty:
+        u, up, toe = half - stride * (p / duty), 0.0, 7.0
+    else:
+        q = (p - duty) / (1 - duty)
+        u, up, toe = -half + stride * smooth(q), lift * math.sin(math.pi * q) ** 1.2, 7.0 - 20.0 * math.sin(math.pi * q)
+    return Vector((f0.x, f0.y - u, f0.z + up)), toe
+
+
+# --- hesitation_peck: rear back slowly, hold and tremble, then a very fast peck to the ground 3 m ahead
+PECK_T = 2.2
+PECK_HIT = 1.64
+peck_s = curve((0, 0), (0.9, -1.0), (1.5, -1.0), (1.585, 0.55), (1.64, 1.0), (1.76, 1.0), (2.0, 0.12), (2.2, 0))
+peck_hold = envelope((0, 0), (0.9, 0), (1.0, 1), (1.4, 1), (1.5, 0), (2.2, 0))  # tremble envelope
+
+
+def peck_pose(rig, t, k=1.0):
+    s = peck_s(t)
+    side_s = peck_s(t - 0.05 * (1 - smooth((t - 1.8) / 0.4)))
+    pose = idle_pose(0.0)
+    back, fore = -55.0, 135.0 * k
+    main = back * -s if s < 0 else fore * s
+    sd_s = side_s
+    side = (-22.0 * -sd_s) if sd_s < 0 else (50.0 * sd_s * k)
+    tremble = 2.4 * peck_hold(t) * math.sin(2 * math.pi * 9.0 * t)
+    pose = trio(pose, None, None, None, main + tremble * 1.0, side + tremble * 0.6,
+                head_main=(-12.0 * -s if s < 0 else 60.0 * s * k), head_side=(10.0 * sd_s))
+    drop = max(0.0, s) * 0.55 * k + max(0.0, -s) * -0.05
+    pose = add_pose(pose, {"pelvis": {"t": (0, 0.12 * max(0.0, -s), -drop)}, "root": {"rot": (20.0 * max(0.0, s) * k, 0, 0)}})
+    return pose, planted(rig)
+
+
+ATTACKS["hesitation_peck"] = dict(T=PECK_T, pose=peck_pose, hit=PECK_HIT, fit=(1.55, 1.95))
+
+# --- flapping_charge: crouch with wings up, a running charge in place with beating wings, a skid and recovery
+CH_T = 2.5
+CH_HIT = 1.75
+CH_RUN_T, CH_STRIDE, CH_DUTY = 0.36, 0.7, 0.5
+CH_GROUND_SPEED = CH_STRIDE / (CH_DUTY * CH_RUN_T)  # m/s the planted foot slides back during the run
+ch_crouch = curve((0, 0), (0.5, 1.0), (0.62, 1.0), (0.78, 0.8), (1.7, 0.8), (2.05, 0.45), (2.5, 0))
+ch_wing = curve((0, 0), (0.45, 1.0), (0.6, 1.0), (1.8, 0.6), (2.1, 0.3), (2.5, 0))
+ch_beat = envelope((0, 0), (0.58, 0), (0.7, 1), (1.7, 1), (1.95, 0.2), (2.15, 0))
+ch_neck = curve((0, 0), (0.5, -0.45), (0.68, 0.15), (0.85, 1.0), (1.7, 1.0), (2.0, -0.12), (2.5, 0))
+ch_lean = curve((0, 0), (0.7, 0.7), (0.9, 1.0), (1.7, 1.0), (1.95, -0.6), (2.2, -0.15), (2.5, 0))
+ch_step = envelope((0, 0), (0.62, 0), (0.82, 1), (1.68, 1), (1.95, 0), (2.5, 0))
+ch_skid = envelope((0, 0), (1.7, 0), (1.95, 1), (2.5, 0))
+
+
+def charge_pose(rig, t, k=1.0):
+    pose = idle_pose(0.0)
+    c, w, e, n, lean = ch_crouch(t), ch_wing(t), ch_beat(t), ch_neck(t), ch_lean(t)
+    for sd in "LR":
+        sg = side_sign(sd)
+        beat = math.sin(2 * math.pi * 3.5 * (t - 0.58))
+        pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * (-40.0 * w + 30.0 * e * beat * k), 0)},
+                               f"wing_upper.{sd}": {"rot": (0, sg * 8.0 * e * k * math.sin(2 * math.pi * 3.5 * (t - 0.58) - 0.5), 0)},
+                               f"wing_fore.{sd}": {"rot": (0, sg * (-10.0 * w + 10.0 * e * k * math.sin(2 * math.pi * 3.5 * (t - 0.58) - 1.0)), 0)},
+                               f"wing_hand.{sd}": {"rot": (0, sg * 14.0 * e * k * math.sin(2 * math.pi * 3.5 * (t - 0.58) - 1.6), 0)}})
+    pose = trio(pose, None, None, None, 58.0 * n if n > 0 else 45.0 * n, 64.0 * n if n > 0 else 30.0 * n,
+                head_main=-22.0 * max(n, 0), head_side=-24.0 * max(n, 0))
+    pose = add_pose(pose, {"pelvis": {"t": (0, 0.45 * max(-lean, 0) + 0.08 * math.sin(2 * math.pi * t / CH_RUN_T * 2) * ch_step(t), -0.30 * c)},
+                           "root": {"rot": (10.0 * lean, 0, 0)}})
+
+    def legs(r):
+        out = {}
+        st, sk = ch_step(t), ch_skid(t)
+        for sd in "LR":
+            p = ((t / CH_RUN_T) + (0.0 if sd == "L" else 0.5)) % 1.0
+            tgt, toe = step_target(r, sd, p, CH_STRIDE, CH_DUTY, 0.28)
+            rest = r.rest_foot[sd]
+            tgt = rest + (tgt - rest) * st
+            tgt.y -= 0.35 * sk
+            out.update(r.leg_aims(sd, tgt, FWD, toe_deg=7.0 + (toe - 7.0) * st))
+        return out
+    return pose, legs
+
+
+ATTACKS["flapping_charge"] = dict(T=CH_T, pose=charge_pose, hit=CH_HIT, fit=(0.5, 2.2))
+
+# --- leap_and_dive: deep crouch, a 3 m jump, wings spread at the apex, necks down, a slam landing, rise to idle
+LP_T = 3.0
+LP_HIT = 1.9
+LP_T0, LP_T1, LP_PEAK = 0.8, 1.85, 3.0
+lp_crouch = curve((0, 0), (0.6, 1.0), (0.78, 1.0), (0.88, -0.15), (1.0, 0), (3.0, 0))
+lp_wing = curve((0, 0), (0.6, -0.4), (0.85, 0.5), (1.325, 1.0), (1.7, 0.55), (1.9, 0.15), (2.15, -0.1), (3.0, 0))
+lp_neck = curve((0, 0), (0.6, -0.5), (0.85, -0.3), (1.25, 0.1), (1.6, 0.85), (1.84, 1.0), (1.98, 1.0), (2.45, 0.2), (3.0, 0))
+lp_pitch = curve((0, 0), (1.2, 0), (1.84, 1.0), (2.0, 0.8), (2.5, 0.1), (3.0, 0))
+lp_slam = envelope((0, 0), (1.8, 0), (1.92, 1.0), (2.3, 0.55), (3.0, 0))
+
+
+def leap_height(t):
+    if t <= LP_T0 or t >= LP_T1:
+        return 0.0
+    mid, half = (LP_T0 + LP_T1) / 2, (LP_T1 - LP_T0) / 2
+    return LP_PEAK * (1 - ((t - mid) / half) ** 2)
+
+
+def leap_pose(rig, t, k=1.0):
+    pose = idle_pose(0.0)
+    h = leap_height(t)
+    cr, w, n, pit, slam = lp_crouch(t), lp_wing(t), lp_neck(t), lp_pitch(t), lp_slam(t)
+    for sd in "LR":
+        sg = side_sign(sd)
+        pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * -26.0 * w, sg * (-18.0 * max(-w, 0)))},
+                               f"wing_fore.{sd}": {"rot": (0, sg * -16.0 * max(w, 0), 0)},
+                               f"wing_hand.{sd}": {"rot": (0, sg * -10.0 * max(w, 0), 0)}})
+    nm = 125.0 * n * k if n > 0 else 45.0 * n
+    ns = 105.0 * n * k if n > 0 else 30.0 * n
+    pose = trio(pose, None, None, None, nm, ns, head_main=24.0 * max(n, 0) * k, head_side=20.0 * max(n, 0) * k)
+    pose = add_pose(pose, {"pelvis": {"t": (0, 0, -0.70 * cr - 0.45 * slam + 0.12 * max(-cr, 0))},
+                           "root": {"t": (0, 0, h), "rot": (26.0 * pit * k, 0, 0)}})
+
+    def legs(r):
+        out = {}
+        air = smooth(h / 0.4)
+        for sd in "LR":
+            tgt = Vector(r.rest_foot[sd])
+            tgt.z += h + 0.35 * air
+            tgt.y += -0.25 * air
+            out.update(r.leg_aims(sd, tgt, FWD, toe_deg=7.0 + 35.0 * air))
+        return out
+    return pose, legs
+
+
+ATTACKS["leap_and_dive"] = dict(T=LP_T, pose=leap_pose, hit=LP_HIT, fit=(1.55, 2.5))
+
+# --- wing_gust: wings sweep up and back, one huge forward flap, body leaning back, then fold to idle
+WG_T = 2.0
+WG_HIT = 1.0
+wg_g = curve((0, 0), (0.75, -1.0), (0.88, -1.0), (0.96, 0.8), (1.02, 1.0), (1.25, 0.55), (1.6, 0.1), (2.0, 0))
+wg_lean = curve((0, 0), (0.8, -0.25), (1.0, 1.0), (1.3, 0.75), (1.7, 0.2), (2.0, 0))
+wg_spread = envelope((0, 0), (0.9, 0), (1.0, 1.0), (1.3, 0.6), (1.7, 0), (2.0, 0))
+
+
+def gust_pose(rig, t, k=1.0):
+    pose = idle_pose(0.0)
+    g, lean, spr = wg_g(t), wg_lean(t), wg_spread(t)
+    for sd in "LR":
+        sg = side_sign(sd)
+        if g < 0:
+            e = -g
+            pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * -34.0 * e, sg * 48.0 * e)},
+                                   f"wing_fore.{sd}": {"rot": (0, sg * -8.0 * e, sg * 12.0 * e)},
+                                   f"wing_hand.{sd}": {"rot": (0, sg * -10.0 * e, sg * 10.0 * e)}})
+        else:
+            pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * 34.0 * g, sg * -72.0 * g)},
+                                   f"wing_fore.{sd}": {"rot": (0, sg * 16.0 * g, sg * -16.0 * g)},
+                                   f"wing_hand.{sd}": {"rot": (0, sg * 34.0 * g, sg * -12.0 * g)}})
+        pose = add_pose(pose, {f"wing_finger_1.{sd}": {"rot": (0, 0, sg * -18.0 * spr)},
+                               f"wing_finger_3.{sd}": {"rot": (0, 0, sg * 18.0 * spr)}})
+    pose = trio(pose, None, None, None, -30.0 * lean, -26.0 * lean, head_main=-14.0 * lean, head_side=-12.0 * lean)
+    pose = add_pose(pose, {"pelvis": {"t": (0, 0.30 * max(lean, 0), -0.08 * lean)}, "root": {"rot": (-14.0 * lean, 0, 0)}})
+    return pose, planted(rig)
+
+
+ATTACKS["wing_gust"] = dict(T=WG_T, pose=gust_pose, hit=WG_HIT, fit=None)
+
+
+
+# ---------------------------------------------------------------- attack group two and the phase transition
+
+def foot_sequence(rig, side, t, steps):
+    """Stepping feet for a rotation about the root: a foot stays where it landed until its next step window
+    (a, b, landing_yaw_degrees), then swings (smoothstep, lifted) to the rest foot position rotated by that yaw."""
+    f0 = rig.rest_foot[side]
+
+    def at(yaw):
+        return Matrix.Rotation(math.radians(yaw), 4, "Z") @ f0
+    cur = (at(0.0), 0.0)
+    for (a, b, land) in steps:
+        if t < a:
+            break
+        if t >= b:
+            cur = (at(land), land)
+            continue
+        q = (t - a) / (b - a)
+        pos = cur[0].lerp(at(land), smooth(q))
+        yaw = cur[1] + (land - cur[1]) * smooth(q)
+        pos.z += 0.34 * math.sin(math.pi * q) ** 1.2
+        return pos, yaw, 7.0 - 20.0 * math.sin(math.pi * q)
+    return cur[0], cur[1], 7.0
+
+
+def jab(t, times, width=0.045):
+    return sum(math.exp(-(((t - ti) / width) ** 2)) for ti in times)
+
+
+# --- turning_tail_sweep: wind-up twist, a fast ~270 degree spin in place, tail and wings sweeping wide, stumble to forward
+TS_T = 2.4
+ts_yaw = curve((0, 0), (0.35, -28), (0.5, -28), (0.9, 120), (1.15, 245), (1.5, 330), (1.75, 370), (2.0, 358), (2.4, 360))
+
+
+def ts_omega(t):
+    """Spin rate in degrees per second, forced to exactly zero at the first and last frame (the curve's own tangent
+    is flat there, but a finite difference of it is not, and that leaked into the tail at frame 0)."""
+    w = min(smooth(t / 0.1), smooth((TS_T - t) / 0.1))
+    return w * (ts_yaw(t + 0.01) - ts_yaw(t - 0.01)) / 0.02
+
+
+TS_HIT = max((f / FPS for f in range(int(TS_T * FPS) + 1)), key=lambda t: abs(ts_omega(t)))
+ts_flare = envelope((0, 0), (0.45, 0.2), (0.8, 1.0), (1.8, 1.0), (2.1, 0.2), (2.4, 0))
+TS_STEPS = {"L": [(0.5, 0.7), (0.9, 1.1), (1.3, 1.5), (1.7, 1.9)], "R": [(0.7, 0.9), (1.1, 1.3), (1.5, 1.7), (1.9, 2.1)]}
+TS_STEPS = {sd: [(a, b, 360.0 if b >= 1.7 else float(ts_yaw(b + 0.05))) for a, b in w] for sd, w in TS_STEPS.items()}
+
+
+def spin_pose(rig, t, k=1.0):
+    pose = idle_pose(0.0)
+    yaw, om, fl = ts_yaw(t), ts_omega(t) / 500.0, ts_flare(t)
+    pose = add_pose(pose, {"root": {"rot": (0, 0, yaw)}, "pelvis": {"rot": (0, 0, -9 * om), "t": (0, 0, -0.10 * fl)},
+                           "spine_3": {"rot": (0, 0, 10 * om)},
+                           "tail_1": {"rot": (0, 0, -52 * om)}, "tail_2": {"rot": (0, 0, -40 * om)}})
+    pose = add_pose(pose, neck_pose(NECK_MAIN, z=22 * om))
+    pose = add_pose(pose, neck_pose(NECK_L, z=26 * om))
+    pose = add_pose(pose, neck_pose(NECK_R, z=26 * om))
+    for sd in "LR":
+        sg = side_sign(sd)
+        pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * -16.0 * fl, 0)},
+                               f"wing_fore.{sd}": {"rot": (0, sg * -10.0 * fl, 0)},
+                               f"wing_hand.{sd}": {"rot": (0, sg * -8.0 * fl, 0)},
+                               f"wing_finger_1.{sd}": {"rot": (0, 0, sg * -16.0 * fl)},
+                               f"wing_finger_3.{sd}": {"rot": (0, 0, sg * 16.0 * fl)}})
+
+    def legs(r):
+        out = {}
+        for sd in "LR":
+            pos, fyaw, toe = foot_sequence(r, sd, t, TS_STEPS[sd])
+            out.update(r.leg_aims(sd, pos, Matrix.Rotation(math.radians(fyaw), 3, "Z") @ FWD, toe_deg=toe))
+        return out
+    return pose, legs
+
+
+ATTACKS["turning_tail_sweep"] = dict(T=TS_T, pose=spin_pose, hit=TS_HIT, fit=None)
+
+# --- neck_lunge_grab: coil back, shoot out about 4 m and low, jaw wide then clamp (hit), shake, toss and release
+NL_T = 3.2
+NL_HIT, NL_RELEASE = 1.2, 2.36
+nl_s = curve((0, 0), (0.7, -1.0), (0.95, -1.0), (1.12, 0.9), (1.2, 1.0), (2.0, 1.0), (2.15, 0.2), (2.36, -0.5), (2.65, -0.2), (3.2, 0))
+nl_jaw = curve((0, 0), (0.85, 0), (1.0, 30), (1.15, 30), (1.22, -36), (2.3, -36), (2.38, 34), (2.65, 34), (2.9, 0), (3.2, 0))
+nl_shake = envelope((0, 0), (1.25, 0), (1.35, 1), (1.9, 1), (2.0, 0))
+nl_toss = envelope((0, 0), (1.95, 0), (2.12, 1), (2.4, 1), (2.9, 0), (3.2, 0))
+NL_SNAPS_L, NL_SNAPS_R = (0.95, 1.75, 2.55), (1.35, 2.15)
+
+
+def lunge_pose(rig, t, k=1.0):
+    pose = idle_pose(0.0)
+    s = nl_s(t)
+    main = (-52.0 * -s) if s < 0 else 122.0 * s * k
+    shake = nl_shake(t) * math.sin(2 * math.pi * 3.5 * (t - 1.3))
+    toss = nl_toss(t)
+    pose = add_pose(pose, neck_pose(NECK_MAIN, x=main, z=36.0 * shake + 45.0 * toss))
+    pose = add_pose(pose, {"head_main": {"rot": (-18.0 * -s if s < 0 else 24.0 * s * k, 0, 22.0 * shake)},
+                           "jaw_main": {"rot": (nl_jaw(t), 0, 0)},
+                           "spine_3": {"rot": (0, 0, 5.0 * shake)}})
+    for sd, chain, snaps in (("L", NECK_L, NL_SNAPS_L), ("R", NECK_R, NL_SNAPS_R)):
+        sn = jab(t, snaps)
+        pose = add_pose(pose, neck_pose(chain, x=30.0 * sn))
+        pose = add_pose(pose, {f"head_{sd}": {"rot": (16.0 * sn, 0, 0)}, f"jaw_{sd}": {"rot": (28.0 * sn, 0, 0)}})
+    lean = max(s, 0.0) * k
+    pose = add_pose(pose, {"pelvis": {"t": (0, -0.55 * lean + 0.12 * max(-s, 0), -0.30 * lean)},
+                           "root": {"rot": (14.0 * lean, 0, 0)}})
+    return pose, planted(rig)
+
+
+ATTACKS["neck_lunge_grab"] = dict(T=NL_T, pose=lunge_pose, hit=NL_HIT, fit=(1.0, 2.1),
+                                  markers={"hit": NL_HIT, "release": NL_RELEASE})
+
+# --- death_honk: all three necks rear back and the chest swells, all heads thrust forward and down, a held scream
+DH_T = 2.6
+DH_HIT = 1.0
+dh_s = curve((0, 0), (0.8, -1.0), (0.92, -1.0), (1.02, 1.0), (1.8, 1.0), (2.3, 0.1), (2.6, 0))
+dh_jaw = envelope((0, 0), (0.9, 0), (1.0, 1), (1.8, 1), (2.1, 0.1), (2.2, 0))
+dh_swell = envelope((0, 0), (0.85, 1.0), (1.1, 0.5), (1.8, 0.5), (2.5, 0))
+dh_brace = envelope((0, 0), (0.7, 0.4), (1.0, 1.0), (1.8, 1.0), (2.5, 0))
+dh_tremble = envelope((0, 0), (0.6, 0), (0.9, 1), (1.9, 1), (2.3, 0))
+
+
+def honk_pose(rig, t, k=1.0):
+    pose = idle_pose(0.0)
+    s = dh_s(t)
+    sw, br, tr = dh_swell(t), dh_brace(t), dh_tremble(t)
+    shud = math.sin(2 * math.pi * 11.0 * t) * (1.0 if 1.0 <= t <= 1.8 else 0.0) * tr
+    main = -55.0 * -s if s < 0 else 62.0 * s * k
+    side = -46.0 * -s if s < 0 else 56.0 * s * k
+    pose = add_pose(pose, neck_pose(NECK_MAIN, x=main + 2.4 * shud))
+    pose = add_pose(pose, neck_pose(NECK_L, x=side + 2.8 * shud))
+    pose = add_pose(pose, neck_pose(NECK_R, x=side - 2.8 * shud))
+    for hd, jw in zip(HEADS, JAWS):
+        pose = add_pose(pose, {hd: {"rot": (-14.0 * -s if s < 0 else 34.0 * s * k, 0, 0)}, jw: {"rot": (48.0 * dh_jaw(t), 0, 0)}})
+    pose = add_pose(pose, {"spine_2": {"scale": 1.0 + 0.07 * sw}, "spine_3": {"scale": 1.0 - 0.065 * sw},
+                           "pelvis": {"t": (0, 0.10 * max(-s, 0), -0.30 * br + 0.02 * shud)},
+                           "root": {"rot": (8.0 * br * k, 0, 0)}})
+    for sd in "LR":
+        sg = side_sign(sd)
+        tremble = tr * math.sin(2 * math.pi * 10.0 * t + (0.0 if sd == "L" else 1.3))
+        pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * (14.0 * br + 2.8 * tremble), 0)},
+                               f"wing_fore.{sd}": {"rot": (0, sg * (8.0 * br + 3.2 * tremble), 0)},
+                               f"wing_hand.{sd}": {"rot": (0, sg * 4.0 * tremble, 0)}})
+    return pose, planted(rig)
+
+
+ATTACKS["death_honk"] = dict(T=DH_T, pose=honk_pose, hit=DH_HIT, fit=(0.9, 2.1))
+
+# --- crown_wakes (phase transition): stagger, kneel, limp side heads, stillness, main head snaps up, crowns grow, roar
+CW_T = 6.0
+CW_ROAR = 4.4
+cw_stagger = curve((0, 0), (0.1, -0.1), (0.35, 1.0), (0.7, 0.7), (1.1, 0.2), (1.5, 0.0), (6.0, 0.0))
+cw_kneel = envelope((0, 0), (0.9, 0), (2.0, 1.0), (3.3, 1.0), (3.7, 0.55), (4.3, 0.15), (5.0, 0.12), (6.0, 0.12))
+cw_main = curve((0, 0), (1.4, 0), (2.0, 1.0), (3.2, 1.0), (3.3, 0.6), (3.45, -0.25), (3.7, 0.0), (6.0, 0.0))
+cw_side = envelope((0, 0), (1.2, 0), (2.0, 1.0), (3.5, 1.0), (4.1, 0.0), (6.0, 0.0))
+cw_roar = envelope((3.9, 0), (4.35, 1.0), (5.2, 1.0), (5.6, 0.0), (6.0, 0.0))
+cw_low = envelope((5.2, 0), (5.9, 1.0), (6.0, 1.0))
+cw_crown = curve((0, 1.0), (3.45, 1.0), (3.7, 1.18), (3.95, 1.6), (4.15, 1.43), (4.35, 1.54), (4.7, 1.5), (6.0, 1.5))
+cw_wing = curve((0, 0), (1.8, 0), (2.4, -0.4), (3.3, -0.4), (4.4, 1.0), (5.2, 0.9), (6.0, 0.5))
+cw_creak = envelope((3.5, 0), (3.8, 1), (4.7, 1), (5.2, 0), (6.0, 0))
+
+
+def crown_pose(rig, t, k=1.0):
+    pose = idle_pose(0.0)
+    a, kn, mn, sd_, ro, lo = cw_stagger(t), cw_kneel(t), cw_main(t), cw_side(t), cw_roar(t), cw_low(t)
+    pose = add_pose(pose, RECOIL, 0.8 * a)
+    pose = add_pose(pose, neck_pose(NECK_MAIN, x=55.0 * mn * k - 36.0 * ro + 8.0 * lo))
+    pose = add_pose(pose, neck_pose(NECK_L, x=98.0 * sd_ * k - 32.0 * ro + 10.0 * lo))
+    pose = add_pose(pose, neck_pose(NECK_R, x=98.0 * sd_ * k - 32.0 * ro + 10.0 * lo, y=0))
+    for hd, jw in zip(HEADS, JAWS):
+        pose = add_pose(pose, {hd: {"rot": ((40.0 * sd_ * k if hd != "head_main" else 30.0 * mn * k) - 22.0 * ro, 0, 0)},
+                               jw: {"rot": (10.0 * sd_ + 50.0 * ro, 0, 0)}})
+    cr = cw_crown(t)
+    cw = cw_creak(t)
+    for i, c in enumerate(CROWNS):
+        pose = add_pose(pose, {c: {"scale": cr, "rot": (0, 3.0 * cw * math.sin(2 * math.pi * 7.0 * (t - 3.5) + i), 1.5 * cw * math.sin(2 * math.pi * 5.0 * t + i))}})
+    u = cw_wing(t)
+    for sd in "LR":
+        sg = side_sign(sd)
+        pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * -30.0 * u, 0)},
+                               f"wing_fore.{sd}": {"rot": (0, sg * -14.0 * u, 0)},
+                               f"wing_hand.{sd}": {"rot": (0, sg * -10.0 * u, 0)}})
+    shud = ro * math.sin(2 * math.pi * 11.0 * t)
+    pose = add_pose(pose, {"pelvis": {"t": (0, 0, -0.72 * kn + 0.02 * shud)}, "root": {"rot": (4.0 * kn, 0, 0)}})
+
+    def legs(r):
+        out = {}
+        for sd in "LR":
+            tgt = Vector(r.rest_foot[sd])
+            tgt.z += 0.025 * kn
+            out.update(r.leg_aims(sd, tgt, FWD, phi_deg=10.0 + 66.0 * kn))
+        return out
+    return pose, legs
+
+
+ATTACKS["crown_wakes"] = dict(T=CW_T, pose=crown_pose, hit=CW_ROAR, fit=(1.2, 4.0), markers={"roar": CW_ROAR})
+
+
+# ---------------------------------------------------------------- version 2: tempo and effort layer
+# Version 2 plays every shared clip at TEMPO times its version 1 length. The version 1 pose functions are evaluated
+# at tau = t * (v1_frames / v2_frames), so all timings (the easing, the holds, the markers) scale together rather
+# than being resampled, and an effort layer is added on top of the scaled pose. It is zero at the first and last
+# frame, so every clip still starts and ends on the version 2 idle's first frame.
+
+TEMPO = 1.4
+V2_CLIPS = (("idle", True), ("walk", True), ("turn_in_place", False), ("hesitation_peck", False),
+            ("flapping_charge", False), ("leap_and_dive", False), ("wing_gust", False),
+            ("turning_tail_sweep", False), ("neck_lunge_grab", False), ("death_honk", False))
+MARKER_SCALE = {}
+V1_RATIO = {}  # clip -> v1 frames / v2 frames (v1 seconds per v2 second)
+
+
+def v1_frame_count(name):
+    with open(os.path.join(HERE, "clips", "metrics.json")) as f:  # read-only: version 1's measurements
+        return json.load(f)[name]["frames"]
+
+
+def v2_frame_count(name):
+    return int(round(v1_frame_count(name) * TEMPO))
+
+
+# the wind-up window of each attack, in version 1 seconds: (start, rise, hold end, release)
+EFFORT_WIND = {
+    "hesitation_peck": ((0, 0), (0.9, 1), (1.5, 1), (1.58, 0)),
+    "flapping_charge": ((0, 0), (0.5, 1), (0.62, 1), (0.8, 0)),
+    "leap_and_dive": ((0, 0), (0.6, 1), (0.78, 1), (0.88, 0)),
+    "wing_gust": ((0, 0), (0.75, 1), (0.88, 1), (0.96, 0)),
+    "turning_tail_sweep": ((0, 0), (0.4, 1), (0.5, 1), (0.9, 0)),
+    "neck_lunge_grab": ((0, 0), (0.7, 1), (0.95, 1), (1.1, 0)),
+    "death_honk": ((0, 0), (0.8, 1), (0.92, 1), (1.02, 0)),
+}
+
+
+def effort_pose(name, tau, t, T1, T2):
+    """The effort layer for an attack: a deeper wind-up, a strain shudder at the strike, a sag after it, and heaving breath.
+    Angles are per bone for the shudder (3 to 4 degrees on every neck bone, 2 to 3 on the wings) and for the whole
+    chain for the slump (10 degrees)."""
+    h = ATTACKS[name]["hit"]
+    wind = max(0.0, min(1.0, pchip(list(EFFORT_WIND[name]), tau)))
+    pose = {"pelvis": {"t": (0, 0.05 * wind, -0.18 * wind)}, "spine_3": {"rot": (-6.0 * wind, 0, 0)}}
+    pose = add_pose(pose, neck_pose(NECK_MAIN, x=-14.0 * wind))
+    pose = add_pose(pose, neck_pose(NECK_L, x=-12.0 * wind))
+    pose = add_pose(pose, neck_pose(NECK_R, x=-12.0 * wind))
+    # strain shudder: about 0.3 s at 5 Hz (3 samples a cycle even in the 15 fps MP4), per bone
+    th = h * T2 / T1
+    win = smooth((t - (th - 0.03)) / 0.05) * (1 - smooth((t - (th + 0.22)) / 0.08))
+    osc = math.sin(2 * math.pi * 5.0 * t) * win
+    for i, n in enumerate(NECK_MAIN):
+        pose = add_pose(pose, {n: {"rot": (2.5 * osc, 0, 3.0 * osc)}})
+    for i, n in enumerate(NECK_L):
+        pose = add_pose(pose, {n: {"rot": (3.5 * osc, 0, 2.5 * osc)}})
+    for i, n in enumerate(NECK_R):
+        pose = add_pose(pose, {n: {"rot": (-3.5 * osc, 0, -2.5 * osc)}})
+    for sd in "LR":
+        sg = side_sign(sd)
+        pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * 3.0 * osc, 0)}, f"wing_fore.{sd}": {"rot": (0, sg * -2.5 * osc, 0)},
+                               f"wing_hand.{sd}": {"rot": (0, sg * 2.0 * osc, 0)}})
+    # sag after the strike: the pelvis drops 0.2 m and the necks slump 10 degrees
+    sag = max(0.0, min(1.0, pchip([(h, 0), (h + 0.12, 1.0), (T1 - 0.1, 0)], tau))) if tau > h else 0.0
+    pose = add_pose(pose, {"pelvis": {"t": (0, 0, -0.20 * sag)}, "spine_3": {"rot": (5.0 * sag, 0, 0)}})
+    for chain in (NECK_MAIN, NECK_L, NECK_R):
+        pose = add_pose(pose, neck_pose(chain, x=10.0 * sag))
+    # recovery heave: 1 to 3 big breaths (about one a second), chest and spine swell 7%, necks and wings rise with each
+    # breath and the heads hang lower between breaths
+    a_, b_ = h + 0.18, T1 - 0.02
+    heave_env = 0.0
+    br = 0.0
+    if b_ > a_ + 0.15:
+        u = max(0.0, min(1.0, (tau - a_) / (b_ - a_)))
+        nb = max(1, min(3, int(round((b_ - a_) * T2 / T1 / 0.9))))
+        br = 0.5 * (1 - math.cos(2 * math.pi * nb * u)) if 0 < u < 1 else 0.0
+        heave_env = smooth(u / 0.15) * (1 - smooth((u - 0.9) / 0.1))
+        EFFORT_BREATHS[name] = nb
+    pose = add_pose(pose, {"spine_1": {"scale": 1.0 + 0.05 * br}, "spine_2": {"scale": 1.0 + 0.07 * br}, "spine_3": {"scale": 1.0 - 0.065 * br},
+                           "pelvis": {"t": (0, 0, 0.03 * br)}})
+    for chain, hang, rise in ((NECK_MAIN, 8.0, -5.0), (NECK_L, 8.0, -5.0), (NECK_R, 8.0, -5.0)):
+        pose = add_pose(pose, neck_pose(chain, x=hang * heave_env * (1 - br) + rise * br))
+    for sd in "LR":
+        sg = side_sign(sd)
+        pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * (-4.0 * br + 3.0 * heave_env * (1 - br)), 0)}})
+    return pose
+
+
+EFFORT_POSES = {}  # clip -> the effort layer's poses, kept to report what it adds
+EFFORT_BREATHS = {}
+
+
+def rot_stats(poses):
+    out, pz, sc = {}, [0.0], [1.0]
+    for pz_ in poses:
+        for bone, e in pz_.items():
+            if "rot" in e:
+                out[bone] = max(out.get(bone, 0.0), max(abs(x) for x in e["rot"]))
+            if bone == "pelvis" and "t" in e:
+                pz.append(e["t"][2])
+            if bone in ("spine_1", "spine_2") and "scale" in e:
+                sc.append(e["scale"])
+    top = sorted(out.items(), key=lambda kv: -kv[1])[:6]
+    return {"max_bone_rotation_deg": round(max(out.values()), 2) if out else 0.0,
+            "top_bones_deg": {k: round(v, 2) for k, v in top},
+            "pelvis_z_range_m": [round(min(pz), 3), round(max(pz), 3)],
+            "chest_scale_range": [round(min(sc), 3), round(max(sc), 3)]}
+
+
+def idle_v2_pose(t, T2):
+    """Slower, heavier breathing (twice the chest and pelvis motion, plus a 4.5% chest swell with the necks and wings rising
+    each breath), and a weight shift each way once a loop that moves the pelvis 0.08 m."""
+    tau = t * (4.0 / T2)
+    base0 = idle_pose(0.0)
+    delta = add_pose(idle_pose(tau), base0, -1.0)
+    for bone, gain in (("spine_2", 2.0), ("spine_3", 2.0), ("pelvis", 2.0)):
+        e = delta.get(bone)
+        if e:
+            for key in ("rot", "t"):
+                if key in e:
+                    e[key] = tuple(gain * x for x in e[key])
+            if "scale" in e:
+                e["scale"] = 1.0 + gain * (e["scale"] - 1.0)
+    pose = add_pose(base0, delta)
+    br = 0.5 * (1 - math.cos(2 * math.pi * 2 * t / T2))  # two breaths a loop, zero at both ends
+    pose = add_pose(pose, {"spine_1": {"scale": 1.0 + 0.03 * br}, "spine_2": {"scale": 1.0 + 0.045 * br}, "spine_3": {"scale": 1.0 - 0.043 * br},
+                           "wing_shoulder.L": {"rot": (0, -3.0 * br, 0)}, "wing_shoulder.R": {"rot": (0, 3.0 * br, 0)}})
+    pose = add_pose(pose, neck_pose(NECK_MAIN, x=-3.0 * br))
+    pose = add_pose(pose, neck_pose(NECK_L, x=-3.0 * br))
+    pose = add_pose(pose, neck_pose(NECK_R, x=-3.0 * br))
+    f = T2 / 5.6
+    sw1 = max(0.0, min(1.0, pchip([(1.2 * f, 0), (1.9 * f, 1), (2.9 * f, 1), (3.6 * f, 0)], t)))
+    sw2 = max(0.0, min(1.0, pchip([(3.9 * f, 0), (4.5 * f, 1), (5.0 * f, 1), (5.4 * f, 0)], t)))
+    shift = sw1 - sw2
+    pose = add_pose(pose, {"pelvis": {"t": (0.08 * shift, 0, -0.02 * abs(shift)), "rot": (0, 2.4 * shift, 0)},
+                           "spine_2": {"rot": (0, -1.8 * shift, 0)}})
+    return pose
+
+
+# ---------------------------------------------------------------- version 2: death and crown_wakes
+# Both clips settle onto the floor. Their poses take a tuple of floor-limited amounts ks (each 0..1): the frame is
+# solved by lifting the root until the trunk is clear of the floor, then backing each amount off in turn (wings, then
+# necks, then jaws, then tongues) just far enough that nothing is below the floor. That is what lays the necks flat and
+# lets the tongues loll onto the ground instead of through it.
+
+V2_FLOOR_CLIPS = ("death", "crown_wakes")
+V2_CLIPS_B = (("death", False), ("crown_wakes", False))
+V2_MARKERS = {}
+
+
+def solve_floor(rig, n, pose_fn, nparams, lift_mask="core", init=None):
+    keys = []
+    lifted = []
+    for f in range(n + 1):
+        t = f / FPS
+        ks = list(init) if init else [0.0] * nparams
+        pose, legs = pose_fn(rig, t, ks)
+        rig.apply_pose(pose, legs)
+        z = rig.min_z(trunk=True) if lift_mask == "trunk" else rig.min_z(core=True)
+        lift = max(0.0, 0.004 - z)
+        liftpose = {"root": {"t": (0, 0, lift)}} if lift else {}
+        for i in range(nparams):
+            ks[i] = 1.0
+            pose, legs = pose_fn(rig, t, ks)
+            rig.apply_pose(add_pose(pose, liftpose), legs)
+            if rig.min_z() >= 0.002:
+                continue
+            lo, hi = 0.0, 1.0
+            for _ in range(7):
+                mid = (lo + hi) / 2
+                ks[i] = mid
+                pose, legs = pose_fn(rig, t, ks)
+                rig.apply_pose(add_pose(pose, liftpose), legs)
+                if rig.min_z() >= 0.002:
+                    lo = mid
+                else:
+                    hi = mid
+            ks[i] = lo
+        pose, legs = pose_fn(rig, t, ks)
+        pose = add_pose(pose, liftpose)
+        rig.apply_pose(pose, legs)
+        z = rig.min_z()
+        if z < 0.002:
+            pose = add_pose(pose, {"root": {"t": (0, 0, 0.002 - z)}})
+            rig.apply_pose(pose, legs)
+        if lift:
+            lifted.append(lift)
+        rig.last_ks = list(ks)
+        keys.append((f, rig.channels()))
+    if lifted:
+        print(f"goose_clips: floor fit lifted the trunk on {len(lifted)} frames, by up to {max(lifted):.3f} m")
+    return keys
+
+
+def shudder_pose(t, times, dur=0.3, neck_deg=3.5, wing_deg=3.0, chains=(NECK_MAIN, NECK_L, NECK_R)):
+    """Strain shudder: 5 Hz, per bone, for dur seconds from each time."""
+    pose = {}
+    for i, th in enumerate(times):
+        win = smooth((t - th) / 0.05) * (1 - smooth((t - (th + dur - 0.08)) / 0.08))
+        if win <= 0:
+            continue
+        osc = math.sin(2 * math.pi * 5.0 * (t - th)) * win
+        for ci, chain in enumerate(chains):
+            sgn = 1 if ci != 2 else -1
+            for n in chain:
+                pose = add_pose(pose, {n: {"rot": (sgn * neck_deg * 0.7 * osc, 0, neck_deg * 0.7 * osc)}})
+        for sd in "LR":
+            sg = side_sign(sd)
+            pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * wing_deg * osc, 0)},
+                                   f"wing_fore.{sd}": {"rot": (0, sg * -wing_deg * 0.8 * osc, 0)}})
+    return pose
+
+
+# --- death: collapse FORWARD onto the chest, legs folded under, wings folded down on the floor, the three necks laid flat
+# in front and slightly fanned, each head rolled onto its cheek with the crown lying sideways, jaws slack, tongues on the floor
+DV_T = 5.6
+dv_c = envelope((0, 0), (0.45, 0), (1.3, 0.4), (1.95, 1.0), (2.4, 1.0))
+dv_a = curve((0, 0), (0.08, -0.1), (0.4, 0.8), (0.9, 0.4), (1.4, 0.1), (2.0, 0.0), (2.2, 0.0), (2.6, 0.0), (5.6, 0))
+dv_neck = envelope((0, 0), (1.5, 0), (2.6, 1.0), (3.0, 1.0))
+dv_roll = envelope((0, 0), (2.0, 0), (2.9, 1.0), (3.1, 1.0))
+dv_jaw = envelope((0, 0), (1.9, 0), (2.9, 1.0), (3.1, 1.0))
+dv_tongue = envelope((0, 0), (2.2, 0), (3.2, 1.0), (3.3, 1.0))
+dv_wing = envelope((0, 0), (1.3, 0), (2.3, 1.0), (2.6, 1.0))
+DV_PITCH, DV_FWD, DV_DROP = -10.0, 0.5, 0.91
+DV_ROLL = {"main": -60.0, "L": -60.0, "R": 60.0}  # about each head's forward axis: negative puts the crown on the +X side
+DV_WING_ROLL = 90.0  # degrees each wing is rolled about its own arm so the feathers lie flat
+DV_FAN = {"main": 0.0, "L": 14.0, "R": -14.0}  # degrees the flat part of each neck fans out
+MAIN_RADII = [0.5, 0.4, 0.28, 0.21, 0.175, 0.165]  # the necks' tube radii in spec.json, root to head
+SIDE_RADII = [0.26, 0.21, 0.17, 0.14, 0.13]
+
+
+def blend_dir(rig, name, target, w):
+    pb = rig.arm.pose.bones[name]
+    cur = (pb.tail - pb.head).normalized()
+    q = cur.rotation_difference(Vector(target).normalized())
+    q = Quaternion((1, 0, 0, 0)).slerp(q, w)
+    rig.apply_entry(name, {"aim": tuple(q @ cur)})
+
+
+def blend_orient(rig, name, target, w):
+    """Turn a bone toward the world orientation `target` (relative to its rest orientation) by the fraction w."""
+    b = rig.arm.data.bones[name]
+    rest3 = b.matrix_local.to_3x3()
+    cur = rig.arm.pose.bones[name].matrix.to_3x3().normalized() @ rest3.inverted()
+    q = Quaternion((1, 0, 0, 0))
+    q = cur.to_quaternion().slerp(target.to_quaternion(), w)
+    rig.apply_entry(name, {"orient": q.to_matrix()})
+
+
+def lay_chain(rig, chain, base_dir, heights, w, descend_deg=48.0):
+    """Aim a chain of bones so each tail lies at its own height (heights is a list, or one number for all), going down from
+    the first joint no steeper than descend_deg, then flat along base_dir."""
+    if not isinstance(heights, (list, tuple)):
+        heights = [heights] * len(chain)
+    sin_d = math.sin(math.radians(descend_deg))
+    for n, hgt in zip(chain, heights):
+        pb = rig.arm.pose.bones[n]
+        head = pb.head.copy()
+        L = rig.len[n]
+        dz = max(hgt - head.z, -L * sin_d)
+        dz = min(dz, L * sin_d)
+        horiz = math.sqrt(max(L * L - dz * dz, 1e-9))
+        T = head + base_dir * horiz + Vector((0, 0, dz))
+        blend_dir(rig, n, T - head, w)
+
+
+def neck_heights(chain, radii, head_scale, extra):
+    """Axis height for each bone tail of a laid-out neck: its tube radius plus a margin, and a head's worth at the end."""
+    n = len(chain)
+    out = []
+    for i in range(n):
+        f = (i + 1) / n * (len(radii) - 1)
+        lo = int(min(f, len(radii) - 2))
+        r = radii[lo] + (radii[lo + 1] - radii[lo]) * (f - lo)
+        out.append(r + 0.04 + extra)
+    out[-1] = max(out[-1], 0.30 * head_scale + extra)
+    return out
+
+
+def death3_pose(rig, t, ks):
+    kw, kl, kn = ks
+    pose = add_pose(idle_pose(0.0), RECOIL, dv_a(t))
+    c = dv_c(t)
+    pose = add_pose(pose, {"pelvis": {"t": (0, -DV_FWD * c, -DV_DROP * c)}, "root": {"rot": (DV_PITCH * c, 0, 0)}})
+    ww = dv_wing(t)
+    sh = shudder_pose(t, [2.0], dur=0.4)  # the impact
+    EFFORT_POSES.setdefault("death", []).append(sh)
+    pose = add_pose(pose, sh)
+    nw, rw, jw_, tw = dv_neck(t), dv_roll(t), dv_jaw(t), dv_tongue(t)
+    extra = (1.0 - kn) * 0.6
+    wextra = (1.0 - kw) * 0.6
+    wdir_w = smooth(min(1.0, ww / 0.5))
+    raise_w = 1.8 * (1.0 - smooth(max(0.0, (ww - 0.5) / 0.5)))
+
+    def finish(r):
+        lw = smooth(max(0.0, (c - 0.35) / 0.65)) * kl
+        for sd in "LR":  # standing legs planted at first; then they fold out and trail back along the floor beside the belly
+            sg = side_sign(sd)
+            tgt = Vector(r.rest_foot[sd])
+            tgt.z += 0.02 * c
+            for n, e in r.leg_aims(sd, tgt, FWD, phi_deg=10.0 + 68.0 * c).items():
+                r.apply_entry(n, e)
+            if lw > 0:
+                lchain = [f"leg_{k}.{sd}" for k in ("thigh", "shin", "tarsus", "toes")]
+                ldir = Vector((sg * 0.55, 1.0, 0.0)).normalized()
+                lay_chain(r, lchain, ldir, [0.28, 0.20, 0.19, 0.19], lw, descend_deg=75.0)
+                bt = r.arm.data.bones[lchain[-1]]
+                rest_dir = (bt.tail_local - bt.head_local).normalized()
+                blend_orient(r, lchain[-1], rest_dir.rotation_difference(ldir).to_matrix(), lw)  # toes flat, not rolled on edge
+        for chain, head, jaw, lab in ((NECK_MAIN, "head_main", "jaw_main", "main"), (NECK_L, "head_L", "jaw_L", "L"), (NECK_R, "head_R", "jaw_R", "R")):
+            f = Matrix.Rotation(math.radians(DV_FAN[lab]), 3, "Z") @ FWD
+            radii = MAIN_RADII if lab == "main" else SIDE_RADII
+            # first the neck swings forward at a height (so it never sweeps through the floor), then it settles down onto it
+            wdir = smooth(min(1.0, nw / 0.4))
+            raise_h = 2.4 * (1.0 - smooth(max(0.0, (nw - 0.4) / 0.6)))
+            hs = [h_ + raise_h for h_ in neck_heights(chain, radii, 1.0 if lab == "main" else 0.74, extra)]
+            lay_chain(r, chain, f, hs, wdir, descend_deg=68.0)
+            pb = r.arm.pose.bones[chain[-1]]
+            fdir = Vector((pb.tail - pb.head)).normalized() if nw > 0.99 else f
+            rest_dir = (r.arm.data.bones[head].tail_local - r.arm.data.bones[head].head_local).normalized()
+            R_head = Matrix.Rotation(math.radians(DV_ROLL[lab]) * rw, 3, fdir) @ rest_dir.rotation_difference(fdir).to_matrix()
+            blend_orient(r, head, R_head, nw)
+            lateral = R_head @ Vector((1, 0, 0))
+            R_jaw = Matrix.Rotation(math.radians(56.0) * jw_, 3, lateral) @ R_head
+            blend_orient(r, jaw, R_jaw, nw)
+            tchain = [f"tongue_{lab}_{i}" for i in (1, 2, 3)]
+            fh = Vector((fdir.x, fdir.y, 0)).normalized()
+            if tw > 0:  # the tongue runs out over the floor
+                lay_chain(r, tchain, fh, 0.06, tw, descend_deg=80.0)
+        for sd in "LR":  # wings folded down onto the floor beside the body and trailing back, fanned out a little
+            sg = side_sign(sd)
+            wchain = [f"wing_{k}.{sd}" for k in ("shoulder", "upper", "fore", "hand")]
+            fb = Matrix.Rotation(math.radians(-sg * 8.0), 3, "Z") @ Vector((0, 1, 0))
+            n0 = wchain[0]  # roll the whole wing about its shoulder axis first (the aims after it keep the roll), so the
+            pb = r.arm.pose.bones[n0]  # feathers lie flat on the floor instead of hanging down
+            axis = (pb.tail - pb.head).normalized()
+            cur = pb.matrix.to_3x3().normalized() @ r.arm.data.bones[n0].matrix_local.to_3x3().inverted()
+            blend_orient(r, n0, Matrix.Rotation(math.radians(sg * DV_WING_ROLL), 3, axis) @ cur, wdir_w)
+            lay_chain(r, wchain, fb, 0.17 + wextra + raise_w, wdir_w, descend_deg=70.0)
+        return {}
+    return pose, finish
+
+
+# --- crown_wakes: dead-looking collapse, stillness and a twitch, side heads rise one at a time, the main head drags up
+# while the crowns crack and grow in three jolts, the wings slam the ground and spread, three roars and a roar together
+CW2_T = 12.0
+cw2_stagger = curve((0, 0), (0.1, -0.1), (0.4, 1.0), (0.8, 0.6), (1.5, 0.0), (1.7, 0.0), (2.2, 0.0), (12, 0))
+cw2_kneel = envelope((0, 0), (0.4, 0), (1.5, 1.0), (7.8, 1.0), (9.3, 0.12), (12, 0.12))
+cw2_main = envelope((0, 0), (0.6, 0), (1.5, 1.0), (5.5, 1.0), (6.2, 0.8), (6.5, 0.8), (7.0, 0.35), (7.2, 0.35), (7.8, 0.0), (12, 0))
+cw2_sideL = envelope((0, 0), (0.6, 0), (1.5, 1.0), (3.0, 1.0), (3.9, 0.0), (12, 0))
+cw2_sideR = envelope((0, 0), (0.6, 0), (1.5, 1.0), (4.3, 1.0), (5.2, 0.0), (12, 0))
+cw2_crown = curve((0, 1.0), (5.8, 1.0), (6.1, 1.22), (6.25, 1.17), (6.8, 1.17), (7.0, 1.40), (7.15, 1.33), (7.5, 1.33),
+                  (7.7, 1.58), (7.9, 1.5), (8.3, 1.5), (9.5, 1.5), (12, 1.5))
+cw2_wing = curve((0, 0), (1.5, -0.35), (7.8, -0.35), (8.25, 1.0), (8.5, 0.9), (9.1, 0.2), (9.5, 1.0), (11.7, 1.0), (12, 0.5))
+cw2_slam = envelope((0, 0), (8.3, 0), (8.6, 1.0), (8.9, 1.0), (9.2, 0))
+cw2_roar = {"L": envelope((9.4, 0), (9.7, 1), (10.05, 1), (10.3, 0)), "R": envelope((9.9, 0), (10.2, 1), (10.55, 1), (10.8, 0)),
+            "main": envelope((10.4, 0), (10.7, 1), (11.05, 1), (11.3, 0))}
+cw2_all = envelope((10.9, 0), (11.1, 1), (11.7, 1), (11.95, 0))
+cw2_low = envelope((11.5, 0), (12.0, 1.0))
+CW2_MARKERS = {"roar_1": 9.7, "roar_2": 10.2, "roar_3": 10.7, "roar_all": 11.1}
+cw2_breath_env = envelope((5.5, 0), (6.0, 1.0), (11.4, 1.0), (11.8, 0))
+
+
+def crown2_pose(rig, t, ks):
+    kw, kn = ks
+    pose = add_pose(idle_pose(0.0), RECOIL, 0.8 * cw2_stagger(t))
+    kn_ = cw2_kneel(t)
+    mn, sl, sr = cw2_main(t) * kn, cw2_sideL(t) * kn, cw2_sideR(t) * kn
+    all_ = cw2_all(t)
+    ro = {"main": max(cw2_roar["main"](t), all_), "L": max(cw2_roar["L"](t), all_), "R": max(cw2_roar["R"](t), all_)}
+    lo = cw2_low(t)
+    pose = add_pose(pose, neck_pose(NECK_MAIN, x=55.0 * mn - 36.0 * ro["main"] + 8.0 * lo))
+    pose = add_pose(pose, neck_pose(NECK_L, x=98.0 * sl - 32.0 * ro["L"] + 10.0 * lo))
+    pose = add_pose(pose, neck_pose(NECK_R, x=98.0 * sr - 32.0 * ro["R"] + 10.0 * lo))
+    for hd, jw, lab, limp in (("head_main", "jaw_main", "main", mn), ("head_L", "jaw_L", "L", sl), ("head_R", "jaw_R", "R", sr)):
+        pose = add_pose(pose, {hd: {"rot": ((30.0 if lab == "main" else 40.0) * limp - 22.0 * ro[lab], 0, 0)},
+                               jw: {"rot": (10.0 * limp + 50.0 * ro[lab], 0, 0)}})
+        for i in (1, 2, 3):  # tongues hang while limp, lash out with each roar
+            pose = add_pose(pose, {f"tongue_{lab}_{i}": {"rot": (14.0 * limp + 8.0 * ro[lab], 0, 0)}})
+    # shudders: the twitch, each side head as it rises, the three crown jolts, the wing slam, each roar
+    sh = {}
+    for part in (shudder_pose(t, [2.5], dur=0.3, neck_deg=2.5),
+                 shudder_pose(t, [3.1, 3.5], dur=0.3, chains=(NECK_L,)),
+                 shudder_pose(t, [4.4, 4.8], dur=0.3, chains=(NECK_R,)),
+                 shudder_pose(t, [6.1, 7.0, 7.7], dur=0.3, chains=(NECK_MAIN,), wing_deg=0.0),
+                 shudder_pose(t, [8.6], dur=0.35, chains=(), wing_deg=3.0),
+                 shudder_pose(t, [9.7, 10.2, 10.7, 11.1], dur=0.3, neck_deg=3.0, wing_deg=2.0)):
+        sh = add_pose(sh, part)
+    EFFORT_POSES.setdefault("crown_wakes", []).append(sh)
+    pose = add_pose(pose, sh)
+    cr = cw2_crown(t)
+    jolt = jab(t, [6.1, 7.0, 7.7], 0.06)
+    for i, c in enumerate(CROWNS):
+        pose = add_pose(pose, {c: {"scale": cr, "rot": (0, 6.0 * jolt * (1 if i % 2 == 0 else -1), 4.0 * jolt)}})
+    u = cw2_wing(t)
+    sl_ = cw2_slam(t) * kw
+    for sd in "LR":
+        sg = side_sign(sd)
+        pose = add_pose(pose, {f"wing_shoulder.{sd}": {"rot": (0, sg * (-30.0 * u + 62.0 * sl_), 0)},
+                               f"wing_fore.{sd}": {"rot": (0, sg * (-14.0 * u + 22.0 * sl_), 0)},
+                               f"wing_hand.{sd}": {"rot": (0, sg * (-10.0 * u + 18.0 * sl_), 0)}})
+    # heaving breath while it struggles up and roars
+    br = 0.5 * (1 - math.cos(2 * math.pi * 4 * max(0.0, min(1.0, (t - 5.5) / 6.3)))) * cw2_breath_env(t)
+    pose = add_pose(pose, {"spine_1": {"scale": 1.0 + 0.05 * br}, "spine_2": {"scale": 1.0 + 0.07 * br}, "spine_3": {"scale": 1.0 - 0.065 * br}})
+    pose = add_pose(pose, {"pelvis": {"t": (0, 0, -0.72 * kn_ + 0.03 * br)}, "root": {"rot": (4.0 * kn_, 0, 0)}})
+
+    def legs(r):
+        out = {}
+        for sd in "LR":
+            tgt = Vector(r.rest_foot[sd])
+            tgt.z += 0.025 * kn_
+            out.update(r.leg_aims(sd, tgt, FWD, phi_deg=10.0 + 66.0 * kn_))
+        return out
+    return pose, legs
+
+
+def solve_v2(rig, name):
+    n1 = v1_frame_count(name)
+    n2 = v2_frame_count(name) if name != "crown_wakes" else int(round(CW2_T * FPS))
+    ratio = n1 / n2
+    V1_RATIO[name] = ratio
+    MARKER_SCALE[name] = 1.0 / ratio
+    T1, T2 = n1 / FPS, n2 / FPS
+    keys = []
+    if name == "idle":
+        EFFORT_POSES[name] = []
+        for f in range(n2 + 1):
+            ip = idle_v2_pose(f / FPS, T2)
+            EFFORT_POSES[name].append(add_pose(ip, idle_pose(f / FPS * ratio), -1.0))
+            rig.apply_pose(ip, planted(rig))
+            keys.append((f, rig.channels()))
+    elif name == "walk":
+        WALK_REST_FOOT.update({s_: tuple(rig.rest_foot[s_]) for s_ in "LR"})
+        for f in range(n2 + 1):
+            t = f / FPS
+            tau = t * ratio
+            w = 2 * math.pi * ((tau / WALK_T) % 1.0)
+            extra = {"pelvis": {"t": (0.03 * math.sin(w), 0, -0.03 - 0.02 * (1 - math.cos(2 * w))), "rot": (0, 2.0 * math.sin(w), 0)},
+                     "spine_1": {"rot": (0, 0, 1.5 * math.sin(w))}}
+            EFFORT_POSES.setdefault(name, []).append(extra)
+            body = add_pose(walk_body(tau), extra)
+
+            def legs(r, tau=tau):
+                out = {}
+                for s_ in "LR":
+                    foot, toe = walk_foot(s_, tau)
+                    out.update(r.leg_aims(s_, foot, FWD, toe_deg=toe))
+                return out
+            rig.apply_pose(body, legs)
+            keys.append((f, rig.channels()))
+    elif name == "turn_in_place":
+        base0 = idle_pose(0.0)
+        b0 = turn_body(0.0)
+        # each landing is a thud: a short dip of the pelvis (landing times are version 1 seconds)
+        lands = sorted(b for steps in STEPS.values() for (_, b, _) in steps)
+        for f in range(n2 + 1):
+            t = f / FPS
+            tau = t * ratio
+            delta = add_pose(turn_body(tau), b0, -1.0)
+            thud = max(math.exp(-(((tau - lb) / 0.06) ** 2)) for lb in lands)
+            thud_pose = {"pelvis": {"t": (0, 0, -0.10 * thud)}}
+            EFFORT_POSES.setdefault(name, []).append(thud_pose)
+            pose = add_pose(add_pose(base0, delta), thud_pose)
+
+            def legs(r, tau=tau):
+                out = {}
+                for s_ in "LR":
+                    foot, yaw, toe = turn_foot(r, s_, tau)
+                    facing = Matrix.Rotation(math.radians(yaw), 3, "Z") @ FWD
+                    out.update(r.leg_aims(s_, foot, facing, toe_deg=toe))
+                return out
+            rig.apply_pose(pose, legs)
+            keys.append((f, rig.channels()))
+    elif name == "death":
+        keys = solve_floor(rig, n2, death3_pose, 3, lift_mask="core", init=[0.0, 1.0, 0.0])
+    elif name == "crown_wakes":
+        V2_MARKERS[name] = CW2_MARKERS
+        MARKER_SCALE[name] = 1.0
+        keys = solve_floor(rig, n2, crown2_pose, 2)
+    elif name in ATTACKS:
+        spec1 = ATTACKS[name]
+
+        def pose_fn(rig_, t, k, spec1=spec1):
+            tau = t * ratio
+            pose, legs = spec1["pose"](rig_, tau, k)
+            eff = effort_pose(name, tau, t, T1, T2)
+            EFFORT_POSES.setdefault(name, []).append(eff)
+            return add_pose(pose, eff), legs
+        fit = spec1["fit"]
+        spec2 = dict(T=T2, pose=pose_fn, hit=spec1["hit"] / ratio, fit=(fit[0] / ratio, fit[1] / ratio) if fit else None)
+        keys = solve_attack(rig, name, spec2)
+    else:
+        die(f"no version 2 clip {name}")
+    return keys
+
+
+def solve_attack(rig, name, spec=None):
+    spec = spec or ATTACKS[name]
+    n = int(round(spec["T"] * FPS))
+    keys = []
+    lifted = []
+    for f in range(n + 1):
+        t = f / FPS
+        k = 1.0
+        window = spec["fit"]
+        pose, legs = spec["pose"](rig, t, 1.0)
+        rig.apply_pose(pose, legs)
+        if window and window[0] <= t <= window[1] and rig.min_z() < 0.002:
+            pose0, legs0 = spec["pose"](rig, t, 0.0)
+            rig.apply_pose(pose0, legs0)
+            floor = min(0.002, rig.min_z() - 1e-4)  # what the pose without the strike already touches
+            lo, hi = 0.0, 1.0
+            for _ in range(8):
+                mid = (lo + hi) / 2
+                pose, legs = spec["pose"](rig, t, mid)
+                rig.apply_pose(pose, legs)
+                if rig.min_z() >= floor:
+                    lo = mid
+                else:
+                    hi = mid
+            pose, legs = spec["pose"](rig, t, lo)
+            rig.apply_pose(pose, legs)
+        z = rig.min_z()
+        if z < 0.002:  # a few centimetres of foot or crouch error: lift the whole body so nothing is below the floor
+            pose = add_pose(pose, {"root": {"t": (0, 0, 0.002 - z)}})
+            rig.apply_pose(pose, legs)
+            lifted.append(round(0.002 - z, 3))
+        keys.append((f, rig.channels()))
+    if lifted:
+        print(f"goose_clips: {name}: lifted the body on {len(lifted)} frames, by up to {max(lifted):.3f} m, to stay off the floor")
+    return keys
+
+
+def attack_markers(name):
+    spec = ATTACKS[name]
+    return spec.get("markers", {"hit": spec["hit"]})
+
+
+def write_action(rig, name, keys, loop):
+    act = bpy.data.actions.new(name)
+    act.use_fake_user = True
+    rig.arm.animation_data_create()
+    rig.arm.animation_data.action = act
+    prev_q = {}
+    rig.reset()
+    touched = set(rig.names)  # every clip keys every bone, so no clip inherits another's leftover pose
+    for f, ch in keys:
+        for n in rig.names:
+            if n not in touched:
+                continue
+            loc, q, sc = ch[n]
+            if n in prev_q and sum(a * b for a, b in zip(q, prev_q[n])) < 0:
+                q = tuple(-x for x in q)  # keep the quaternion on the near side so keys interpolate the short way
+            prev_q[n] = q
+            pb = rig.arm.pose.bones[n]
+            pb.location, pb.rotation_quaternion, pb.scale = loc, q, sc
+            pb.keyframe_insert("location", frame=f)
+            pb.keyframe_insert("rotation_quaternion", frame=f)
+            pb.keyframe_insert("scale", frame=f)
+    act["loop"] = loop
+    if name in ATTACKS or name in V2_MARKERS:  # the events, as timeline markers on the action
+        for mname, mtime in (V2_MARKERS[name] if name in V2_MARKERS else attack_markers(name)).items():
+            mk = act.pose_markers.new(mname)
+            mk.frame = int(round(mtime * MARKER_SCALE.get(name, 1.0) * FPS))
+    act.frame_start, act.frame_end = 0, keys[-1][0]
+    act.use_frame_range = True
+    rig.arm.animation_data.action = None
+    return act
+
+
+def foot_names():
+    return [f"leg_toes.{s}" for s in "LR"]
+
+
+def snapshot(rig, act, frame):
+    rig.arm.animation_data.action = act
+    bpy.context.scene.frame_set(frame)
+    ev_arm = rig.arm.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    return np.array([list(ev_arm.pose.bones[n].head) + list(ev_arm.pose.bones[n].tail) for n in rig.names])
+
+
+def slide_stats(rig, foot, frames, ground_speed):
+    """Planted-foot slide speed over a window of frames against the implied ground speed."""
+    dt = 1.0 / FPS
+    rec = {}
+    for s in "LR":
+        fp = np.array(foot[s])
+        planted_f = fp[:, 2] < rig.rest_foot[s].z + 0.01
+        sp = [(fp[i + 1, 1] - fp[i, 1]) / dt for i in frames if planted_f[i] and planted_f[i + 1]]
+        sp = np.array(sp)
+        rec[s] = {"planted_frames_in_window": int(len(sp)), "slide_speed_mean_mps": round(float(sp.mean()), 4),
+                  "slide_speed_min_mps": round(float(sp.min()), 4), "slide_speed_max_mps": round(float(sp.max()), 4),
+                  "max_abs_dev_from_ground_speed_mps": round(float(np.abs(sp - ground_speed).max()), 4)}
+    return rec
+
+
+def measure(rig, name, act, loop, ratio=1.0):
+    idle0 = snapshot(rig, bpy.data.actions["idle"], 0)
+    rig.arm.animation_data.action = act
+    rig.mod.show_viewport = True
+    sc = bpy.context.scene
+    f0, f1 = int(act.frame_start), int(act.frame_end)
+    dg = None
+    minz, minz_at = 1e9, None
+    foot = {s: [] for s in "LR"}
+    rootz, rootxy, headpos, crown_last = [], [], [], {}
+    pose_first = pose_last = None
+    t0 = time.time()
+    for f in range(f0, f1 + 1):
+        sc.frame_set(f)
+        dg = bpy.context.evaluated_depsgraph_get()
+        ev = rig.obj.evaluated_get(dg)
+        m = ev.to_mesh()
+        co = np.empty(len(m.vertices) * 3)
+        m.vertices.foreach_get("co", co)
+        ev.to_mesh_clear()
+        z = float(co[2::3].min())
+        if z < minz:
+            minz, minz_at = z, f
+            vi = int(np.argmin(co[2::3]))
+            low_group = rig.obj.vertex_groups[max(rig.obj.data.vertices[vi].groups, key=lambda g: g.weight).group].name
+        ev_arm = rig.arm.evaluated_get(dg)
+        for s in "LR":
+            foot[s].append(tuple(ev_arm.pose.bones[f"leg_toes.{s}"].head))
+        headpos.append(tuple(ev_arm.pose.bones["head_main"].head))
+        crown_last = {c: ev_arm.pose.bones[c].scale[0] for c in CROWNS}
+        rh = ev_arm.pose.bones["root"].head
+        rootz.append(rh[2])
+        rootxy.append((rh[0], rh[1]))
+        snap = np.array([list(ev_arm.pose.bones[n].head) + list(ev_arm.pose.bones[n].tail) for n in rig.names])
+        if f == f0:
+            pose_first = snap
+        pose_last = snap
+    out = {"frames": f1 - f0, "seconds": (f1 - f0) / FPS, **({"v1_frames": v1_frame_count(name), "tempo": round(1 / ratio, 4)} if ratio != 1.0 else {}), "loop": bool(loop), "min_z_m": round(minz, 4),
+           "min_z_frame": minz_at, "min_z_vertex_bone": low_group, "min_z_ok": minz >= -FLOOR_TOL, "min_z_checked": "every frame, full mesh",
+           "loop_pose_diff_m": round(float(np.abs(pose_first - pose_last).max()), 6) if loop else None,
+           "measure_seconds": round(time.time() - t0, 1)}
+    rootz, rootxy, headpos = np.array(rootz), np.array(rootxy), np.array(headpos)
+    if V2 and name == "death":  # the final frame (the loop above left the scene on it): is it lying down?
+        names_ = [g_.name for g_ in rig.obj.vertex_groups]
+        prim_ = [names_[max(v.groups, key=lambda g_: g_.weight).group] for v in rig.obj.data.vertices]
+        zz = co[2::3] if co.ndim == 1 else co[:, 2]
+        trunk_ = np.array([not p_.startswith(("neck_", "head_", "jaw_", "crown_", "tongue_", "wing_", "leg_")) for p_ in prim_])
+        breast_ = np.array([p_ == "spine_3" for p_ in prim_])
+        pb = ev_arm.pose.bones
+        chains = {"main": NECK_MAIN, "L": NECK_L, "R": NECK_R}
+        out["final_pose"] = {
+            "lowest_trunk_vertex_z_m": round(float(zz[trunk_].min()), 3),
+            "lowest_breast_vertex_z_m": round(float(zz[breast_].min()), 3),
+            "root_lift_z_m": round(float(pb["root"].head[2]), 3),
+            "neck_bone_tail_heights_m": {k: [round(float(pb[n].tail[2]), 2) for n in v] for k, v in chains.items()},
+            "max_neck_bone_tail_height_beyond_the_first_three_m": round(max(float(pb[n].tail[2]) for v in chains.values() for n in v[3:]), 3),
+            "tongue_tip_z_m": {k: round(float(pb[f"tongue_{k}_3"].tail[2]), 3) for k in chains},
+            "still_from_frame": None,
+        }
+    if name in EFFORT_POSES:
+        out["effort_layer"] = rot_stats(EFFORT_POSES[name])
+        if name in EFFORT_BREATHS:
+            out["effort_layer"]["recovery_breaths"] = EFFORT_BREATHS[name]
+    if name in ATTACKS or name in V2_FLOOR_CLIPS:
+        out["markers"] = {m.name: {"frame": m.frame, "time_s": round(m.frame / FPS, 3),
+                                   "normalised": round(m.frame / (f1 - f0), 4)} for m in act.pose_markers}
+        hit = [m.frame for m in act.pose_markers if m.name == "hit"]
+        out["hit_marker_frame"] = hit[0] if hit else None
+        out["hit_time_s"] = round(hit[0] / FPS, 3) if hit else None
+        out["hit_normalised"] = round(hit[0] / (f1 - f0), 4) if hit else None
+        out["crown_scales_last_frame"] = {c: round(float(v), 3) for c, v in crown_last.items()}
+        if name == "neck_lunge_grab":
+            hf = hit[0] if hit else int(round(NL_HIT * FPS))
+            out["head_main_at_hit_m"] = {"forward_from_root": round(float(-headpos[hf][1]), 2), "height": round(float(headpos[hf][2]), 2)}
+            out["head_main_max_forward_m"] = round(float(-headpos[:, 1].min()), 2)
+        out["first_frame_vs_idle0_pose_diff_m"] = round(float(np.abs(pose_first - idle0).max()), 6)
+        out["last_frame_vs_idle0_pose_diff_m"] = round(float(np.abs(pose_last - idle0).max()), 6)
+        out["root_peak_z_m"] = round(float(rootz.max()), 3)
+        out["root_max_xy_m"] = round(float(np.abs(rootxy).max()), 4)
+        if name == "flapping_charge":
+            run = range(int(0.95 * FPS / ratio), int(1.65 * FPS / ratio))
+            out["implied_ground_speed_mps"] = round(CH_GROUND_SPEED * ratio, 3)
+            out["stride_m"], out["stance_fraction"], out["step_cycle_s"] = CH_STRIDE, CH_DUTY, round(CH_RUN_T / ratio, 4)
+            out["run_window_s"] = [run.start / FPS, run.stop / FPS]
+            out["feet"] = slide_stats(rig, foot, run, CH_GROUND_SPEED * ratio)
+    if name == "walk":
+        dt = 1.0 / FPS
+        rec = {}
+        speeds_all = []
+        for s in "LR":
+            fp = np.array(foot[s])
+            planted_f = fp[:, 2] < rig.rest_foot[s].z + 0.01
+            sp = []
+            for i in range(len(fp) - 1):
+                if planted_f[i] and planted_f[i + 1]:
+                    sp.append((fp[i + 1, 1] - fp[i, 1]) / dt)
+            sp = np.array(sp)
+            tight = fp[:, 2] < rig.rest_foot[s].z + 0.0005  # frames with the foot flat on the floor, no lift yet
+            steady = np.array([abs((fp[i + 1, 1] - fp[i, 1]) / dt) - WALK_GROUND_SPEED * ratio for i in range(len(fp) - 1)
+                               if tight[i] and tight[i + 1]])
+            rec[s] = {"planted_frames": int(planted_f.sum()), "slide_speed_mean_mps": round(float(sp.mean()), 4),
+                      "slide_speed_min_mps": round(float(sp.min()), 4), "slide_speed_max_mps": round(float(sp.max()), 4),
+                      "max_abs_dev_from_ground_speed_mps": round(float(np.abs(sp - WALK_GROUND_SPEED * ratio).max()), 4),
+                      "mean_dev_from_ground_speed_pct": round(float(100 * (sp.mean() / (WALK_GROUND_SPEED * ratio) - 1)), 2),
+                      "steady_frames_dev_pct": round(float(100 * (np.abs(steady).max() / (WALK_GROUND_SPEED * ratio) - 0)), 2) if len(steady) else None,
+                      "planted_lateral_drift_m": round(float(np.ptp(fp[planted_f, 0])), 4),
+                      "planted_height_range_m": round(float(np.ptp(fp[planted_f, 2])), 4)}
+            speeds_all += list(sp)
+        out["implied_ground_speed_mps"] = round(WALK_GROUND_SPEED * ratio, 4)
+        out["stride_m"], out["stance_fraction"], out["cycle_s"] = WALK_STRIDE, WALK_DUTY, round(WALK_T / ratio, 4)
+        out["feet"] = rec
+        out["root_displacement_m"] = 0.0
+    rig.arm.animation_data.action = None
+    rig.mod.show_viewport = False
+    return out
+
+
+def build():
+    t0 = time.time()
+    rig = Rig(os.path.join(HERE, RIGGED))
+    bpy.context.scene.render.fps = FPS
+    metrics = {}
+    acts = {}
+    clips = (V2_CLIPS + V2_CLIPS_B) if V2 else CLIP_LIST
+    only = os.environ.get("GOOSE_ONLY")  # development: build just these clips, into GOOSE_OUT, without touching metrics.json
+    if only:
+        if not os.environ.get("GOOSE_OUT"):
+            die("GOOSE_ONLY needs GOOSE_OUT (a scratch .blend) so no committed file is overwritten")
+        clips = tuple(c for c in clips if c[0] in only.split(","))
+    for name, loop in clips:
+        t1 = time.time()
+        rig.reach_err = 0.0
+        keys = solve_v2(rig, name) if V2 else solve_clip(rig, name)
+        acts[name] = write_action(rig, name, keys, loop)
+        print(f"goose_clips: {name}: {len(keys)} keys, frames 0..{keys[-1][0]}, IK reach shortfall "
+              f"{rig.reach_err:.3f} m, solved in {time.time() - t1:.1f} s")
+        rig.reach_err = 0.0
+    bpy.context.scene.frame_start, bpy.context.scene.frame_end = 0, 120
+    for name, loop in clips:
+        metrics[name] = measure(rig, name, acts[name], loop, V1_RATIO.get(name, 1.0))
+        print(f"goose_clips: {name}: {json.dumps(metrics[name])}")
+    rig.reset()
+    rig.mod.show_viewport = True
+    bpy.ops.object.mode_set(mode="OBJECT")
+    os.makedirs(CLIPS_DIR, exist_ok=True)
+    if not only:
+        with open(os.path.join(CLIPS_DIR, "metrics.json"), "w") as f:
+            json.dump(metrics, f, indent=1)
+    if not V2:  # (the version 2 manifest comes with the full clip list)
+        write_manifest(metrics)
+    bpy.ops.wm.save_as_mainfile(filepath=os.environ.get("GOOSE_OUT") or os.path.join(HERE, ANIMATED), compress=True)
+    bad = [n for n, m in metrics.items() if not m["min_z_ok"]]
+    print(f"goose_clips: wrote {ANIMATED} and {os.path.basename(CLIPS_DIR)}/metrics.json in {time.time() - t0:.1f} s")
+    if bad:
+        die(f"clips go below the floor: {bad}")
+
+
+# ---------------------------------------------------------------- review renders
+
+BG = "#EDE6D6"
+
+
+CAM_TARGET = {"death": (2.0, 0.3, 2.2), "leap_and_dive": (0, -0.5, 4.0), "hesitation_peck": (0, -1.0, 2.8), "neck_lunge_grab": (0, -1.3, 2.8), "death_honk": (0, -0.8, 2.8)}  # the goose falls toward +X
+
+
+def setup_scene(res, samples, target=(0, 0.3, 3.0)):
+    from PIL import Image  # noqa: F401  (fail early if Pillow is missing)
+    sc = bpy.context.scene
+    for o in [o for o in bpy.data.objects if o.type in ("CAMERA", "LIGHT") or o.name.startswith("Ground")]:
+        bpy.data.objects.remove(o)
+    sc.render.engine = "CYCLES"
+    sc.cycles.device = "CPU"
+    sc.cycles.samples = samples
+    sc.cycles.use_denoising = True
+    sc.cycles.max_bounces = 3
+    sc.cycles.use_light_tree = False
+    sc.render.resolution_x = sc.render.resolution_y = res
+    sc.view_settings.view_transform = "AgX"
+    sc.render.image_settings.file_format = "PNG"
+    sc.render.film_transparent = True
+    sc.render.image_settings.color_mode = "RGBA"
+    w = bpy.data.worlds.new("W")
+    sc.world = w
+    w.use_nodes = True
+    w.node_tree.nodes["Background"].inputs["Color"].default_value = (0.03, 0.022, 0.015, 1)
+    d = 20.0
+    centre = Vector((0, 0, 3.3))
+    for name, pos, en, sz, col in (("Key", (0.75, -0.95, 0.85), 26, 0.6, (1.0, 0.86, 0.7)),
+                                   ("Fill", (-1.1, -0.55, 0.25), 5, 1.0, (1.0, 0.78, 0.6)),
+                                   ("Rim", (-0.3, 1.2, 1.0), 22, 0.6, (0.7, 0.76, 0.9))):
+        ld = bpy.data.lights.new(name, "AREA")
+        ld.energy = en * d * d
+        ld.size = d * sz
+        ld.color = col
+        lo = bpy.data.objects.new(name, ld)
+        lo.location = centre + Vector(pos) * d
+        lo.rotation_euler = (centre - lo.location).to_track_quat("-Z", "Y").to_euler()
+        sc.collection.objects.link(lo)
+    gm = bpy.data.meshes.new("Ground")
+    g = 400
+    gm.from_pydata([(-g, -g, 0), (g, -g, 0), (g, g, 0), (-g, g, 0)], [], [(0, 1, 2, 3)])
+    ground = bpy.data.objects.new("Ground", gm)
+    sc.collection.objects.link(ground)
+    ground.is_shadow_catcher = True
+    cam = bpy.data.objects.new("Cam", bpy.data.cameras.new("Cam"))
+    cam.data.type = "ORTHO"
+    cam.data.clip_start, cam.data.clip_end = 0.01, 400
+    yaw, pitch = math.radians(-35), math.radians(16)
+    toward = Vector((math.sin(yaw) * math.cos(pitch), -math.cos(yaw) * math.cos(pitch), math.sin(pitch)))
+    target = Vector(target)
+    cam.location = target + toward * 60
+    cam.rotation_euler = (-toward).to_track_quat("-Z", "Y").to_euler()
+    cam.data.ortho_scale = 11.0
+    sc.collection.objects.link(cam)
+    sc.camera = cam
+
+
+def composite(path):
+    from PIL import Image
+    h = BG.lstrip("#")
+    r = Image.open(path).convert("RGBA")
+    flat = Image.new("RGBA", r.size, tuple(int(h[i:i + 2], 16) for i in (0, 2, 4)) + (255,))
+    Image.alpha_composite(flat, r).convert("RGB").save(path)
+
+
+def render_clip(rig, name, tmp):
+    from PIL import Image, ImageDraw, ImageFont
+    act = bpy.data.actions[name]
+    sc = bpy.context.scene
+    rig.arm.animation_data_create()
+    rig.arm.animation_data.action = act
+    rig.mod.show_viewport = True
+    n = int(act.frame_end)
+    loop = bool(act.get("loop"))
+    frames = [int(round(x)) for x in np.linspace(0, n, 8, endpoint=not loop)]
+    if os.environ.get("GOOSE_FRAMES"):  # debugging: just these frames, into the scratch folder, no sheet
+        setup_scene(600, 16, CAM_TARGET.get(name, (0, 0.3, 3.0)))
+        for f in [int(x) for x in os.environ["GOOSE_FRAMES"].split(",")]:
+            sc.frame_set(f)
+            sc.render.filepath = os.path.join(tmp, f"{name}_dbg_{f:03d}.png")
+            bpy.ops.render.render(write_still=True)
+            composite(sc.render.filepath)
+        rig.arm.animation_data.action = None
+        return {"debug": True}
+    times = {}
+    # --- stills
+    setup_scene(600, 16, CAM_TARGET.get(name, (0, 0.3, 3.0)))
+    t0 = time.time()
+    tiles = []
+    for f in frames:
+        sc.frame_set(f)
+        p = os.path.join(tmp, f"{name}_still_{f:03d}.png")
+        sc.render.filepath = p
+        bpy.ops.render.render(write_still=True)
+        composite(p)
+        tiles.append((f, Image.open(p).convert("RGB")))
+    times["stills_s"] = round(time.time() - t0, 1)
+    tw = tiles[0][1].width
+    sheet = Image.new("RGB", (tw * 4, tw * 2 + 0), BG)
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 26)
+    except OSError:
+        font = ImageFont.load_default()
+    for i, (f, im) in enumerate(tiles):
+        x, y = (i % 4) * tw, (i // 4) * tw
+        sheet.paste(im, (x, y))
+        d = ImageDraw.Draw(sheet)
+        d.text((x + 12, y + 10), f"{name}  frame {f}  ({f / FPS:.2f} s)", fill="#14120E", font=font)
+    sheet_path = os.path.join(CLIPS_DIR, f"{name}_sheet.png")
+    sheet.save(sheet_path)
+    if os.environ.get('GOOSE_STILLS_ONLY'):
+        rig.arm.animation_data.action = None
+        return times
+    # --- mp4: every second frame at 15 fps, 480 px, 8 samples
+    setup_scene(480, 8, CAM_TARGET.get(name, (0, 0.3, 3.0)))
+    t0 = time.time()
+    seq = os.path.join(tmp, f"{name}_seq")
+    os.makedirs(seq, exist_ok=True)
+    for i, f in enumerate(range(0, n + (0 if loop else 1), 2)):
+        sc.frame_set(f)
+        p = os.path.join(seq, f"{i:04d}.png")
+        sc.render.filepath = p
+        bpy.ops.render.render(write_still=True)
+        composite(p)
+    mp4 = os.path.join(CLIPS_DIR, f"{name}.mp4")
+    rc = os.system(f'ffmpeg -y -loglevel error -framerate 15 -i "{seq}/%04d.png" -c:v libx264 -pix_fmt yuv420p "{mp4}"')
+    if rc != 0:
+        die(f"ffmpeg failed for {name}")
+    times["mp4_s"] = round(time.time() - t0, 1)
+    rig.arm.animation_data.action = None
+    return times
+
+
+def render(names):
+    tmp = os.environ.get("GOOSE_CLIPS_TMP")
+    if not tmp:
+        die("set GOOSE_CLIPS_TMP to a scratch directory for the intermediate frames")
+    os.makedirs(tmp, exist_ok=True)
+    os.makedirs(CLIPS_DIR, exist_ok=True)
+    bpy.ops.wm.open_mainfile(filepath=os.environ.get("GOOSE_BLEND") or os.path.join(HERE, ANIMATED))
+    arm = bpy.data.objects["goose_rig"]
+    bpy.context.view_layer.objects.active = arm
+
+    class R:  # the bits of Rig that render needs
+        pass
+    rig = R()
+    rig.arm, rig.obj = arm, bpy.data.objects[SLUG]
+    rig.mod = [m for m in rig.obj.modifiers if m.type == "ARMATURE"][0]
+    names = names or ["idle", "walk", "turn_in_place", "stagger", "death"]
+    for name in names:
+        t0 = time.time()
+        times = render_clip(rig, name, tmp)
+        print(f"goose_clips: rendered {name}: {json.dumps(times)} total {time.time() - t0:.1f} s")
+
+
+
+# ---------------------------------------------------------------- export, manifest
+
+ENDS_IN = {"death": "dead", "crown_wakes": "phase2_stance"}
+
+
+def write_manifest(metrics):
+    """clips/manifest.json from metrics.json (so the two cannot disagree): what an engine importer reads."""
+    clips = []
+    for name, loop in CLIP_LIST:
+        m = metrics[name]
+        events = [{"name": k, "normalised_time": v["normalised"], "frame": v["frame"], "time_s": v["time_s"]}
+                  for k, v in m.get("markers", {}).items()]
+        if name == "turn_in_place":
+            motion = {"kind": "yaw", "degrees": YAW_KEYS[-1][1], "note": "root rotates about Z, 90 degrees to the right"}
+        elif name == "turning_tail_sweep":
+            motion = {"kind": "yaw", "degrees": 360.0, "note": "root rotates about Z, about 385 degrees in all from the wind-up (fast phase about 273), ends facing forward"}
+        elif name == "leap_and_dive":
+            motion = {"kind": "z", "peak_m": m["root_peak_z_m"], "note": "root rises in Z; no x or y travel"}
+        else:
+            motion = {"kind": "none"}
+        entry = {"name": name, "frames": m["frames"], "seconds": m["seconds"], "fps": FPS, "loop": bool(loop),
+                 "events": events, "ends_in": ENDS_IN.get(name, "idle"), "root_motion": motion}
+        if "implied_ground_speed_mps" in m:
+            entry["implied_ground_speed_mps"] = m["implied_ground_speed_mps"]
+        if name == "crown_wakes":
+            entry["end_pose_vs_idle_m"] = m["last_frame_vs_idle0_pose_diff_m"]
+            entry["crown_scales_last_frame"] = m["crown_scales_last_frame"]
+        clips.append(entry)
+    out = {"model": FBX, "armature": "goose_rig", "fps": FPS, "bones": BONES_EXPECTED, "units": "metres, +Z up, faces -Y in Blender",
+           "note": "Event times are also stored as pose markers on the Blender actions; the FBX does not carry them, so this file is the source of truth for events.",
+           "clips": clips}
+    os.makedirs(CLIPS_DIR, exist_ok=True)
+    path = os.path.join(CLIPS_DIR, "manifest.json")
+    with open(path, "w") as f:
+        json.dump(out, f, indent=1)
+    return path
+
+
+def export_fbx():
+    """goose_anims.fbx: the armature and all 13 actions as takes, no mesh; then re-import and check it."""
+    t0 = time.time()
+    with open(os.path.join(CLIPS_DIR, "metrics.json")) as f:
+        metrics = json.load(f)
+    manifest = write_manifest(metrics)
+    bpy.ops.wm.open_mainfile(filepath=os.path.join(HERE, ANIMATED))
+    names = [n for n, _ in CLIP_LIST]
+    missing = [n for n in names if n not in bpy.data.actions]
+    if missing:
+        die(f"{ANIMATED} lacks actions {missing}; run build first")
+    arm = bpy.data.objects["goose_rig"]
+    bpy.ops.object.select_all(action="DESELECT")
+    arm.select_set(True)
+    bpy.context.view_layer.objects.active = arm
+    arm.animation_data_create()
+    arm.animation_data.action = bpy.data.actions["idle"]
+    for tr in list(arm.animation_data.nla_tracks):
+        arm.animation_data.nla_tracks.remove(tr)
+    bpy.context.scene.render.fps = FPS
+    out = os.path.join(HERE, FBX)
+    bpy.ops.export_scene.fbx(filepath=out, use_selection=True, object_types={"ARMATURE"},
+                             use_armature_deform_only=True, add_leaf_bones=False,
+                             bake_anim=True, bake_anim_use_all_actions=True, bake_anim_use_nla_strips=False,
+                             bake_anim_step=1.0, bake_anim_simplify_factor=0.0, bake_anim_force_startend_keying=True,
+                             axis_forward="-Z", axis_up="Y", apply_scale_options="FBX_SCALE_UNITS", path_mode="RELATIVE")
+    size = os.path.getsize(out)
+    print(f"goose_clips: wrote {out} ({size / 1024:.0f} KiB) and {manifest}")
+
+    # re-import into a fresh scene and check every take
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    bpy.ops.import_scene.fbx(filepath=out, automatic_bone_orientation=False)
+    objs = [o.type for o in bpy.data.objects]
+    print(f"goose_clips: re-imported objects: {sorted(set(objs))} ({len(objs)} total)")
+    takes = {}
+    for act in bpy.data.actions:
+        lo, hi = act.frame_range
+        takes[act.name] = (lo, hi, len(act.pose_markers))
+    print(f"goose_clips: re-imported takes: {len(takes)}")
+    problems = []
+    short = {}
+    for full, (lo, hi, nm) in sorted(takes.items()):
+        key = full.split("|")[-1]
+        short[key] = (lo, hi, nm)
+        print(f"  {full}: frames {lo:g}..{hi:g} ({hi - lo:g} frames), pose markers {nm}")
+    if len(takes) != 13:
+        problems.append(f"{len(takes)} takes re-imported, expected 13")
+    for n in names:
+        if n not in short:
+            problems.append(f"take {n} missing after re-import")
+            continue
+        lo, hi, _ = short[n]
+        want = metrics[n]["frames"]
+        if abs((hi - lo) - want) > 1:
+            problems.append(f"take {n} is {hi - lo:g} frames, metrics.json says {want}")
+    bones = [b.name for o in bpy.data.objects if o.type == "ARMATURE" for b in o.data.bones]
+    print(f"goose_clips: re-imported bones: {len(bones)}")
+    if len(bones) != BONES_EXPECTED:
+        problems.append(f"{len(bones)} bones after re-import, expected {BONES_EXPECTED}")
+    survived = sum(nm for _, _, nm in short.values())
+    expect = sum(len(metrics[n].get("markers", {})) for n in names)
+    print(f"goose_clips: pose markers after re-import: {survived} of {expect} " +
+          ("(markers survived)" if survived == expect else "(FBX does not carry the markers; manifest.json is the source of truth for events)"))
+    print(f"goose_clips: export and re-import took {time.time() - t0:.1f} s")
+    if problems:
+        die("export check failed:\n  " + "\n  ".join(problems))
+
+
+def compare(names):
+    """clips_v2/<clip>_compare.mp4: the version 1 MP4 on the left, version 2 on the right, the shorter held on its last frame."""
+    import subprocess
+    font = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    for name in names or [n for n, _ in V2_CLIPS]:
+        a, b = os.path.join(HERE, "clips", f"{name}.mp4"), os.path.join(CLIPS_DIR, f"{name}.mp4")
+        if not (os.path.isfile(a) and os.path.isfile(b)):
+            die(f"compare needs {a} and {b}")
+
+        def dur(path):
+            r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+                               capture_output=True, text=True)
+            return float(r.stdout.strip())
+        d1, d2 = dur(a), dur(b)
+        hold = max(0.0, d2 - d1)
+        label = lambda txt: f"drawtext=fontfile={font}:text={txt}:x=12:y=10:fontsize=30:fontcolor=#14120E:box=1:boxcolor=#EDE6D6@0.8:boxborderw=6"
+        graph = (f"[0:v]tpad=stop_mode=clone:stop_duration={hold + 0.2:.3f},{label('v1')}[l];"
+                 f"[1:v]tpad=stop_mode=clone:stop_duration={max(0.0, d1 - d2) + 0.2:.3f},{label('v2')}[r];"
+                 f"[l][r]hstack=inputs=2,trim=duration={max(d1, d2):.3f}[v]")
+        out = os.path.join(CLIPS_DIR, f"{name}_compare.mp4")
+        cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", a, "-i", b, "-filter_complex", graph, "-map", "[v]",
+               "-c:v", "libx264", "-pix_fmt", "yuv420p", out]
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode != 0:
+            die(f"ffmpeg compare failed for {name}: {r.stderr[:300]}")
+        print(f"goose_clips: {name}_compare.mp4: v1 {d1:.2f} s | v2 {d2:.2f} s")
+
+
+def final_views(name, outdir):
+    """Close-ups of a clip's last frame: the whole body from low in three-quarter, the three heads with their tongues, and
+    from above. Written to outdir as <clip>_final_<view>.png."""
+    bpy.ops.wm.open_mainfile(filepath=os.environ.get("GOOSE_BLEND") or os.path.join(HERE, ANIMATED))
+    arm = bpy.data.objects["goose_rig"]
+    bpy.context.view_layer.objects.active = arm
+    arm.animation_data_create()
+    act = bpy.data.actions[name]
+    arm.animation_data.action = act
+    sc = bpy.context.scene
+    sc.frame_set(int(act.frame_end))
+    ev = arm.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    body = Vector(ev.pose.bones["spine_1"].head)
+    heads = [Vector(ev.pose.bones[f"head_{x}"].head) for x in ("main", "L", "R")]
+    hc = sum(heads, Vector()) / 3
+    views = (("low_threequarter", (body + hc) / 2, 8.0, -35.0, 8.0), ("heads", hc, 2.6, -40.0, 22.0), ("top", (body + hc) / 2, 9.0, 0.0, 85.0))
+    os.makedirs(outdir, exist_ok=True)
+    for label, target, scale, yaw, pitch in views:
+        setup_scene(700, 24, tuple(target))
+        cam = sc.camera
+        cam.data.ortho_scale = scale
+        yr, pr = math.radians(yaw), math.radians(pitch)
+        toward = Vector((math.sin(yr) * math.cos(pr), -math.cos(yr) * math.cos(pr), math.sin(pr)))
+        cam.location = Vector(target) + toward * 60
+        cam.rotation_euler = (-toward).to_track_quat("-Z", "Y").to_euler()
+        path = os.path.join(outdir, f"{name}_final_{label}.png")
+        sc.render.filepath = path
+        bpy.ops.render.render(write_still=True)
+        composite(path)
+        print(f"goose_clips: wrote {path}")
+
+
+def main():
+    if not ARGS or ARGS[0] not in ("build", "render", "export", "compare", "final"):
+        die("usage: goose_clips.py [--v2] build | render [clip ...] | export | compare [clip ...] | final CLIP")
+    if ARGS[0] == "final":
+        final_views(ARGS[1], os.environ.get("GOOSE_FINAL_DIR") or CLIPS_DIR)
+        return
+    if V2 and ARGS[0] == "export":
+        die("version 2: the export waits for the full clip list (a later issue)")
+    if ARGS[0] == "compare":
+        if not V2:
+            die("compare is a version 2 command: use --v2")
+        compare(ARGS[1:])
+    elif ARGS[0] == "build":
+        build()
+    elif ARGS[0] == "export":
+        export_fbx()
+    else:
+        render(ARGS[1:])
+
+
+main()

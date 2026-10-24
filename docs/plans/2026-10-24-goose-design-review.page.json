@@ -1,0 +1,59 @@
+{
+  "title": "Goose Boss Design Review",
+  "eyebrow": "Design review for approval · version 2 of the goose boss clips · nothing changed yet",
+  "approval": "Design approved: goose design review",
+  "short": {
+    "lead": "You asked for a senior game designer's view of the goose boss clips, for a Soulslike game with Canadian roots, and said The Crown Wakes looks flickery, like a seizure, rather than scary. I checked: The Crown Wakes fires 15 separate shudder bursts in its 12 seconds, each a shake at 5 per second for 0.3 s, and each crown growth snaps in 0.2 s. That fast, repeated shaking reads as malfunction, not menace. Below are eight recommendations with the reason for each, and six questions that decide which ones to act on.",
+    "hint": "Tap a step to see what it changes and why.",
+    "key": [["Recommendation", ""], ["Needs you first", "you"]],
+    "items": [
+      ["eye", "Crown Wakes", "Make the transition slow and wrong, not shaky", "", "Cut the 15 shudder bursts. Horror comes from anticipation and wrongness: long stillness, then movement that is slow, heavy and in the wrong order. The main neck should rise one vertebra at a time, like something being dragged upright. Each crown should creak outward over 1 to 1.5 s and end in a single crack, rather than snapping in 0.2 s. The side heads should come up while the main head is still limp, as if they woke first. End on one long roar from the main head with the side heads joining late, instead of four roars 0.5 s apart.", "Your choice on the first question under Choices."],
+      ["bulb", "Tempo", "Slow the wind-ups and recoveries, keep the strikes fast", "", "Version 2 slowed every part of every clip to 1.4 times its version 1 duration, including the strikes. The charge fell from 3.9 m/s to 2.8 m/s and the walk to 0.45 m/s (art/goose/clips_v2/metrics.json). In the genre, weight comes from a long wind-up and a slow, exposed recovery; danger comes from a strike that is fast once it commits. A uniformly slow strike can be dodged on reflex, which makes a huge boss feel harmless. I recommend wind-ups at 1.6 times version 1, strikes at 1.0 to 1.1, and recoveries at 1.4.", "Your choice on the second question."],
+      ["hand", "Hits", "Make hit reactions small and partial", "", "A boss that flinches its whole body at every hit looks weak and can be locked down by fast weapons. Bosses in the genre usually take hits with only the struck part reacting while the attack carries on (often called poise or hyper armour: the boss keeps attacking instead of being interrupted). I recommend the five hit reactions move only the necks, heads and wings, with the legs planted, so the game can play them on top of whatever clip is running. The full-body stun stays the reward for breaking its stance.", "Your choice on the third question."],
+      ["check", "Stun", "Give the stun a clear target to punish", "", "A stun window needs an obvious payoff. I recommend stun_fall drops the main head to the ground in front of the body, within a sword's reach of a player standing at its chest. That gives a critical strike an obvious target, and stun_loop keeps the head there while the side heads thrash weakly.", "Your choice on the fourth question."],
+      ["bulb", "Goose tells", "Borrow real Canada goose threat behaviour as warnings", "", "Real Canada geese warn before they attack: they pump their heads up and down, lower the neck and hiss with wings half-open, and strike with the bony wrist of the wing. Using those behaviours as the boss's warning signs (its \"tells\") gives the boss an identity no other boss has, and the honk is a ready-made audio cue. I recommend head-pumping before the peck and lunge, the low-neck hiss before the charge, and the wrist-strike shape in the wing gust. For sound later, the main head gives a deep honk before big attacks and the side heads higher honks before quick ones.", "Your choice on the fifth question."],
+      ["list", "Head roles", "Give each head a job", "", "Three heads attacking at once is visual noise; the player must always know which one is the threat. I recommend the main head leads every big, committed attack and the side heads make quick follow-ups or snap at a player who circles to the side. Several clips already lean this way (Neck Lunge Grab, Death Honk); this makes it the rule.", "Covered by your choice on the fifth question (\"Should the attacks gain real goose tells and fixed head roles?\")."],
+      ["eye", "Phase two", "Phase two should change the fight, not only the stance", "", "In the genre a second phase changes the rhythm: new moves, faster combinations, or a new threat. Today phase two is a stance with bigger crowns. The bigger crowns suggest an obvious new weapon: a sweeping head-butt with the crown branches. That needs a new set of clips, so I suggest a separate proposal rather than adding it to this round.", "Your choice on the sixth question."],
+      ["bulb", "Canadian roots", "Keep the identity; take care with Wendigo echoes", "", "The dead maple, the maple-leaf brand, the goose itself and a cold, hungry beast are strong Canadian roots. The antler-like crown, emaciation and hunger also echo the Wendigo, which comes from the stories of Algonquian-speaking peoples. If the game leans that way, it is worth doing so knowingly and respectfully, ideally with input from people of those nations; if not, keep the goose's identity distinct. Small touches that need no new clips: breath fog in the idle (cold), and a migration motif such as a V of dead geese in the arena sky.", "Nothing now; it is advice for the game."]
+    ]
+  },
+  "changes": [
+    ["keep", "Version 1 and the approved version 2 work", "Nothing already built is thrown away.", null, "Version 1 stays untouched. Of version 2, the rig, idle, the attacks and the forward death keep their shapes; the recommendations change timing, The Crown Wakes and the not-yet-built stun and hits.", null, null],
+    ["chg", "The Crown Wakes (version 2)", "Rebuilt slow and heavy if you agree.", ["15 shudder bursts at 5 per second, crowns snapping in 0.2 s, four roars 0.5 s apart", "Long stillness, the neck dragged up vertebra by vertebra, crowns creaking out over 1 to 1.5 s with one crack, one long roar"], "Still 12 s and still ending in the phase-two stance.", null, null],
+    ["chg", "Attack timing (version 2)", "Split timing if you agree.", ["Every part 1.4 times version 1", "Wind-up 1.6, strike 1.0 to 1.1, recovery 1.4 times version 1"], "The shudder at each strike becomes one heavy shake rather than a fast tremor, for the same reason as The Crown Wakes.", null, null]
+  ],
+  "choices": [
+    ["crown", "The Crown Wakes: how should it be fixed?", [
+      ["A", "Rework it slow, heavy and wrong", 1, "Long stillness, the neck dragged up a vertebra at a time, crowns creaking out with one crack each, side heads waking before the main head, one long roar."],
+      ["B", "Only remove the shudders", 0, "Keep the current beats and timing; just take out the 15 shake bursts."]
+    ], "Removing the shudders stops the flicker, but the snapping crowns and rapid roars would still read as twitchy rather than dreadful."],
+    ["tempo", "Should strikes stay fast while wind-ups and recoveries slow?", [
+      ["A", "Yes: split the timing", 1, "Wind-up 1.6, strike 1.0 to 1.1, recovery 1.4 times version 1."],
+      ["B", "No: keep every part at 1.4", 0, "As approved for version 2."]
+    ], "It keeps the weight you asked for and keeps the boss dangerous."],
+    ["hits", "How should the five hit reactions work?", [
+      ["A", "Partial: necks, heads and wings only, legs planted", 1, "Layered over any clip by the game, so a hit never interrupts an attack."],
+      ["B", "Full body, as planned", 0, "Each hit plays as its own whole clip and interrupts what the boss was doing."]
+    ], "Making the hit reactions partial (option A) stops fast weapons from locking the boss down and keeps the stun meaningful."],
+    ["stun", "Should the stun present the main head as the target?", [
+      ["A", "Yes", 1, "The main head lies on the ground in front, in reach for a critical strike."],
+      ["B", "No, as planned", 0, "It falls onto its chest with the heads lolling wherever they land."]
+    ], ""],
+    ["tells", "Should the attacks gain real goose tells and fixed head roles?", [
+      ["A", "Yes, both", 1, "Head-pumping before the peck and lunge, the low hiss before the charge, the wrist-strike wing; the main head leads big attacks and the side heads follow up."],
+      ["B", "Only the head roles", 0, "Leave the wind-ups as they are."],
+      ["C", "Neither", 0, "Leave the attacks as they are."]
+    ], "These tells are what will make this boss unmistakably a goose and unmistakably yours."],
+    ["phase2", "What about a phase-two moveset?", [
+      ["A", "A separate proposal after this round", 1, "I bring a page of phase-two moves once these changes are done."],
+      ["B", "Not now", 0, "Phase two stays a stance change for now."]
+    ], "It is new work, so it gets its own design round rather than riding along with fixes."]
+  ],
+  "wrapup": {
+    "summary": "Eight recommendations for the goose boss as a Soulslike boss, led by a slow, dread-filled Crown Wakes in place of the current flickery one.",
+    "changing": "Nothing yet. If you approve, The Crown Wakes is rebuilt, attack timing is split, and the stun and hits are built the way you choose; version 1 stays untouched.",
+    "blocking": "The stun and hit reactions (issue #12) wait for your answers to the third and fourth questions; the forward death rework carries on.",
+    "next": "Once you approve, I log the decisions, update the version 2 issues, and the builder carries on from the death rework.",
+    "todo": ["Pick an answer for each of the six questions under Choices.", "Tap <b>Copy my reply</b>.", "Send it with \"Design approved: goose design review\", or what to change."]
+  }
+}

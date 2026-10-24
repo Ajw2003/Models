@@ -1,0 +1,53 @@
+{
+  "title": "Goose Boss Animation",
+  "eyebrow": "Design for approval · The Honking Deep (the goose boss) · nothing built yet",
+  "approval": "Design approved: goose boss animation",
+  "short": {
+    "lead": "You asked for the goose boss (art/goose, The Honking Deep) to be animated as a Soulslike boss with five attacks and a phase transition. Today the goose is one finished mesh with no skeleton and no animation, so this needs a rig (a skeleton bound to the mesh) first, then the clips (the animations). The four choices below decide which five attacks it has, what the phase transition looks like, which extra clips come with them, and where the result goes.",
+    "hint": "Tap a step to see what it creates and what it needs from you.",
+    "key": [["I build it", ""], ["Needs you first", "you"]],
+    "items": [
+      ["eye", "Today", "What exists today", "", "The pass 19 goose: one mesh of 272,380 triangles, three baked 4096 px textures, exported as goose.glb, goose.fbx and goose.blend, 6.75 m tall. Its stats.json records 0 bones. There is no rig or clip code anywhere in the models repo. The art-pipeline plugin ships only render_views.py and review_sheet.py, and this work reuses both for every review. The mesh itself is not changed unless you pick the new-geometry phase transition.", "Nothing from you.", {"src": "../art/reviews/goose-review.png", "alt": "The goose boss review sheet, pass 19: concept on the left, renders on the right", "caption": "The goose as it stands now (pass 19)."}],
+      ["hand", "Choices", "Your four choices", "you", "Which five attacks, which phase transition, which extra clips, and where the finished clips go.", "Pick an option for each of the four questions under Choices, or write your own."],
+      ["hammer", "Rig", "The skeleton", "", "A generic (non-humanoid) skeleton of 59 bones: root, pelvis, three spine and two tail bones; the main neck with 7 bones, a head and a jaw; each side neck with 6 bones, a head and a jaw; one bone for each dead maple crown, so the crowns can sway and grow; each wing with a shoulder, upper arm, forearm, hand and four bare finger bones; each leg with thigh, shin, tarsus and toes. A script builds it and binds it to the mesh with automatic weights (Blender works out how far each bone pulls on the nearby surface). Extra rules keep the teeth, ribs and finger bones rigid.", "Nothing from you."],
+      ["loop", "Clips", "The animations", "", "Each clip is keyframed by a script from named poses, with a wind-up, a strike and a recovery so every attack can be read and dodged, which is what makes it feel Soulslike. Every clip stays in place (the goose does not travel across the ground; the game moves it) and carries hit events, which are marked moments in the clip when damage can land.", "Nothing from you."],
+      ["eye", "Review", "The look after every stage", "", "The rig gets a posed review sheet before any clip is made. Each clip gets 8 stills on the real goose and an MP4, and I write down what I saw before the next clip starts.", "Nothing from you. Every sheet will be in the pull request for you to see."],
+      ["check", "Pull request", "Delivered by pull request", "you", "Everything is committed on AjsAgent/import-models and reaches main only by a pull request, as you asked.", "You check the clips, then merge."]
+    ]
+  },
+  "changes": [
+    ["new", "art/goose/build_rig.py", "Builds the 59-bone skeleton and binds it to the goose mesh.", null, "Takes the bone positions from the design numbers already in spec.json (neck curves, wing joints, leg joints), so the rig will follow the mesh if the mesh is ever rebuilt. Writes goose_rigged.blend and a posed review sheet.", null, null],
+    ["new", "art/goose/goose_clips.py", "The named poses and the clips built from them.", null, "One pose library (rest, crouch, rear-up, wings spread and so on) and one function per clip. Each function times its poses with easing (smooth starts and stops), anticipation (a small wind-up before a move) and overshoot (going slightly past the target, then settling back). Exports goose_anims.fbx (animation only) and a clip manifest, which lists each clip's length, whether it loops, and its hit events.", null, null],
+    ["new", "art/goose/clips/", "Review stills and an MP4 per clip.", null, "8 stills per clip on the real model plus a short MP4, so each clip can be judged without Blender.", null, null],
+    ["chg", "art/goose/spec.json and README.md", "Gain a rig section and a clip list.", ["0 bones, no clips", "59 bones, the chosen clips with timings"], "The README's known-gaps line, which says there is no rig and no clips, is updated to say what now exists.", null, null],
+    ["keep", "The goose mesh and textures", "Unchanged, unless you pick the new-geometry phase transition.", null, "goose.glb, goose.fbx and the textures stay exactly as pass 19.", null, null]
+  ],
+  "choices": [
+    ["attacks", "Which five attacks?", [
+      ["A", "Three heads, one beast", 1, "Built on what only this goose has. 1. Triple Peck: the three heads strike one after another, the last one held back to catch an early dodge. 2. Wing Rake: a wide sweep of the bone-fingered wing. 3. Rearing Stomp: it rears up flapping and slams both feet down. 4. Neck Lunge Grab: the main neck shoots forward, seizes, shakes and throws. 5. Death Honk: all three heads scream in a close-range blast."],
+      ["B", "The bird that hunts", 0, "Built on goose movement. 1. Hesitation Peck: a long held wind-up, then a fast peck. 2. Flapping Charge: a running charge with wings beating. 3. Leap and Dive: it jumps and dive-bombs the spot. 4. Wing Gust: a flap that pushes the player away. 5. Turning Tail Sweep: it spins and sweeps with its tail and rear."],
+      ["C", "Mix and match", 0, "Name any five attacks from the lists above, or suggest your own."]
+    ], "Option A uses the three heads and the finger-bone wings, the two things that set this boss apart from a large bird. It still covers the usual Soulslike attack types: a delayed attack, a sweep, an area slam, a grab and a burst."],
+    ["phase", "What happens at the phase transition?", [
+      ["A", "The Crown Wakes (animation only)", 1, "It staggers to its knees, the side heads hang limp, then the main head snaps upright, the dead maple crowns grow by half, the wings unfold to full span and all three heads scream. This works by scaling bones, so it needs no new geometry."],
+      ["B", "The Brand Tears Open (new geometry)", 0, "The maple-leaf brand on the breast splits into a fourth maw full of teeth. Needs a new pass on the model, with its own review, before any animation starts. That makes it the bigger job."],
+      ["C", "Something else", 0, "Describe it."]
+    ], "Option A reads clearly as a second phase and leaves the approved pass 19 model untouched. Option B is the more dramatic reveal, but it reopens the model you have already signed off."],
+    ["extras", "Which clips come beyond the five attacks and the transition?", [
+      ["A", "The playable set", 1, "Adds idle, walk, turn on the spot, stagger (hit reaction) and death. Five more clips."],
+      ["B", "Only what was asked", 0, "The five attacks and the phase transition, nothing else."],
+      ["C", "The playable set plus phase-two idle", 0, "Everything in option A, plus a more agitated idle for phase two. That makes six extra clips."]
+    ], "A boss with attacks but no idle, walk or death clip cannot be dropped into a fight, so I suggest the five supporting clips in option A. You only asked for the attacks and the transition, so option B is the strict reading of your request."],
+    ["target", "Where does the finished work go?", [
+      ["A", "This repo only", 1, "The rigged .blend file, the animation FBX, the clip manifest and all review stills and MP4s, committed in Ajw2003/models."],
+      ["B", "Also into a game", 0, "Also import it into a Unity project (tell me which one). Unity cannot run in this cloud session, so that part would be untested. I would hand it to you with the exact menu item to run."]
+    ], "Nothing in PlunderSpell or the other repos mentions the goose today, so I don't know which game it belongs to. Option A keeps this repo self-contained."]
+  ],
+  "wrapup": {
+    "summary": "A 59-bone rig for the goose and the clips you pick, each looked at on the real model before the next one starts.",
+    "changing": "New rig and clip scripts, and their outputs, in art/goose. spec.json and the README gain a rig section and a clip list. The mesh stays as pass 19 unless you pick the new-geometry transition.",
+    "blocking": "Nothing is blocked except your answers to the four choices above.",
+    "next": "Once you approve, I open issues for the rig, for each group of clips, and for the review, build on AjsAgent/import-models and open a pull request into main.",
+    "todo": ["Pick an answer for each of the four questions under Choices.", "Tap <b>Copy my reply</b>.", "Send it with \"Design approved: goose boss animation\", or what to change."]
+  }
+}
