@@ -576,7 +576,10 @@ def build_wing(W, sign, rng):
     shoulder, elbow, wrist, tip = (pick(W[k]) for k in ("shoulder", "elbow", "wrist", "tip"))
     tag = "R" if sign > 0 else "L"
     parts = []
-    arm = tube(f"wing_arm_{tag}", [shoulder, elbow, wrist, tip], W["radii"], "PlumageBrown", step=0.03,
+    control, radii = [shoulder, elbow, wrist, tip], W["radii"]
+    if "root" in W:  # version 2: the arm reaches into the body so the fused skin joins it there
+        control, radii = [pick(W["root"])] + control, [W["root_radius"]] + radii
+    arm = tube(f"wing_arm_{tag}", control, radii, "PlumageBrown", step=0.03,
                segments=20, ref=(0.0, -1.0, 0.0))
     parts.append(arm)
 
@@ -737,7 +740,7 @@ def build_parts(spec=None, version=1):
     spec = spec or load_spec()
     D = spec["design"]
     if version == 2:
-        D = {**D, **spec["v2"]["design"]}
+        D = {k: {**D[k], **v} if isinstance(v, dict) and k in D else v for k, v in {**D, **spec["v2"]["design"]}.items()}
     rng = random.Random(D["eye_seed"])
     body = build_body(D)
     parts = [body]

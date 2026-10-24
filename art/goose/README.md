@@ -23,6 +23,8 @@ roughness); faces -Y, origin on the ground between the feet.
 | `goose.glb` / `goose.fbx` / `goose.blend` | the model |
 | `views/` | the four review renders and `stats.json` |
 | `build_rig.py` | adds the 59-bone armature to `goose.blend`, skins it (weights computed per part, not bone-heat), runs the pose test; writes `goose_rigged.blend` |
+| `goose_skin.py` | version 2: melts the soft parts into one closed skin and carries version 1's colour over to it (#18) |
+| `goose_v2.glb` / `goose_v2.fbx` / `goose_v2.blend` | version 2 model from `build_goose.py --v2`, textures in `textures_v2/`; review sheet `docs/art/reviews/goose-v2-review.png` |
 | `goose_rigged.blend` | the model with the rig bound; `rig_views/` holds its pose-test renders (rest three-quarter, posed three-quarter, front, side) |
 | `goose_clips.py` | the pose library and the 13 clips as Blender Actions at 30 fps, their metrics, per-clip review renders, and the FBX / manifest export |
 | `goose_animated.blend` | `goose_rigged.blend` plus the 13 actions (fake user), with "hit" / "release" / "roar" pose markers |

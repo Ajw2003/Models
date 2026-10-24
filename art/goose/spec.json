@@ -440,6 +440,11 @@
           0.165
         ]
       },
+      "wing": {
+        "note": "version 1's wing arm stops 0.1 m short of the body, so the fused skin would leave it separate; the arm now starts at root, inside the body. The feathers still hang from shoulder, elbow, wrist and tip, so the wing itself does not move",
+        "root": [0.35, -0.5, 2.4],
+        "root_radius": 0.22
+      },
       "side_neck": {
         "note": "the +X neck, starting inside the root's top; from path[2] up it is version 1's side neck, so the side heads stay where they were",
         "path": [
