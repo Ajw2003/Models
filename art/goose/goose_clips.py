@@ -1221,7 +1221,7 @@ def neck_heights(chain, radii, head_scale, extra):
 
 
 def death3_pose(rig, t, ks):
-    kw, kn = ks
+    kw, kl, kn = ks
     pose = add_pose(idle_pose(0.0), RECOIL, dv_a(t))
     c = dv_c(t)
     pose = add_pose(pose, {"pelvis": {"t": (0, -DV_FWD * c, -DV_DROP * c)}, "root": {"rot": (DV_PITCH * c, 0, 0)}})
@@ -1234,7 +1234,7 @@ def death3_pose(rig, t, ks):
     wextra = 0.0
 
     def finish(r):
-        lw = smooth(max(0.0, (c - 0.35) / 0.65))
+        lw = smooth(max(0.0, (c - 0.35) / 0.65)) * kl
         for sd in "LR":  # standing legs planted at first; then they fold out and trail back along the floor beside the belly
             sg = side_sign(sd)
             tgt = Vector(r.rest_foot[sd])
@@ -1251,7 +1251,11 @@ def death3_pose(rig, t, ks):
         for chain, head, jaw, lab in ((NECK_MAIN, "head_main", "jaw_main", "main"), (NECK_L, "head_L", "jaw_L", "L"), (NECK_R, "head_R", "jaw_R", "R")):
             f = Matrix.Rotation(math.radians(DV_FAN[lab]), 3, "Z") @ FWD
             radii = MAIN_RADII if lab == "main" else SIDE_RADII
-            lay_chain(r, chain, f, neck_heights(chain, radii, 1.0 if lab == "main" else 0.74, extra), nw, descend_deg=68.0)
+            # first the neck swings forward at a height (so it never sweeps through the floor), then it settles down onto it
+            wdir = smooth(min(1.0, nw / 0.4))
+            raise_h = 2.4 * (1.0 - smooth(max(0.0, (nw - 0.4) / 0.6)))
+            hs = [h_ + raise_h for h_ in neck_heights(chain, radii, 1.0 if lab == "main" else 0.74, extra)]
+            lay_chain(r, chain, f, hs, wdir, descend_deg=68.0)
             pb = r.arm.pose.bones[chain[-1]]
             fdir = Vector((pb.tail - pb.head)).normalized() if nw > 0.99 else f
             rest_dir = (r.arm.data.bones[head].tail_local - r.arm.data.bones[head].head_local).normalized()
@@ -1409,7 +1413,7 @@ def solve_v2(rig, name):
             rig.apply_pose(pose, legs)
             keys.append((f, rig.channels()))
     elif name == "death":
-        keys = solve_floor(rig, n2, death3_pose, 2, lift_mask="core")
+        keys = solve_floor(rig, n2, death3_pose, 3, lift_mask="core")
     elif name == "crown_wakes":
         V2_MARKERS[name] = CW2_MARKERS
         MARKER_SCALE[name] = 1.0
