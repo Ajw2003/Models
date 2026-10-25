@@ -3,7 +3,9 @@
 **Done:** removed the maple leaf brand from goose_v2's breast, after aj said it looked comical
 rather than fearful; version 1 keeps it. aj said the neck work is taking shape.
 
-**Next, in order:** aj's QA pass on #18 with #25; push the branch; then #19, #20 and #21.
+aj passed QA on the goose v2 necks ("QA passed: goose v2 necks"); the branch was pushed.
+
+**Next, in order:** #19 (muscle and feathers, with 2,180 triangles left), #20 (textures), #21 (the rig).
 
 ---
 

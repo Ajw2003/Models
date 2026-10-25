@@ -22,7 +22,7 @@
   version 1's 1,071. Review sheet: `docs/art/reviews/goose-v2-review.png`. The join close-ups show
   no seam lines; the colour still changes in a hard, ragged black-to-pale line across the breast,
   which #20 replaces. Version 1's files are unchanged (`git status`).
-- #25 necks (after aj's QA check failed #18 for rigid, smooth necks): built, waits on aj's review.
+- #25 necks (after aj's QA check failed #18 for rigid, smooth necks): built; aj passed QA on 2026-10-25.
   The necks rest in an S-curve with 15 and 12 vertebra ridges and a bone spike per vertebra.
   `build_goose.py --v2` now gives 1,094 parts, 297,820 triangles (2,180 under budget), 6.750 m,
   skin 1 piece. Under the dark neck colour the ridges read faintly; the spikes carry the
