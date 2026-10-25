@@ -59,3 +59,6 @@ paths rest in an S-curve with the heads unmoved; a `v2.vertebrae` block sets 15 
 main neck and 12 on each side neck, each a ridge under the skin (strongest along the back) with a
 bone spike tearing out of it, in place of version 1's 13 neck spikes. #21 rigs one bone per
 vertebra.
+
+Brand: `goose_texture.bake(..., version=)` takes its decal from that version's parts; version 2 sets
+`v2.design.maple.brand` to null, so its breast has no maple leaf and the brand shader step is skipped.

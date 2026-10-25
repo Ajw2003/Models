@@ -802,7 +802,7 @@ def build_parts(spec=None, version=1):
 def build_maple(M, body):
     """The brand and the blood-soaked feathers on the breast."""
     rng = random.Random(M["seed"])
-    out = breast_brand(M["brand"])
+    out = breast_brand(M["brand"]) if M["brand"] else []  # version 2 has none: aj found it comical, not fearful
     out += soaked_breast_feathers(body, M["soaked_feathers"], rng)
     return out
 

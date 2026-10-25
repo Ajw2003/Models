@@ -145,7 +145,8 @@ def main():
     obj = build_mesh(spec, parts_mesh, mats)
     tris, height = validate(spec, obj, parts_mesh.materials, mats, skin_shells)
     pixels = int(os.environ.get("GOOSE_TEXTURE_PX", spec["texture"]["pixels"]))
-    textures = goose_texture.bake(obj, spec, os.path.join(HERE, "textures" + suffix), pixels)
+    textures = goose_texture.bake(obj, spec, os.path.join(HERE, "textures" + suffix), pixels,
+                                version=2 if is_v2 else 1)
 
     bpy.context.view_layer.objects.active = obj
     obj.select_set(True)

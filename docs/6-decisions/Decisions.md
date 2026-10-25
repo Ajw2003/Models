@@ -3,6 +3,19 @@
 The running log of what was decided in this repo, when and why. Newest entry at the top. Entries
 are never rewritten; a later decision flips an old entry's Status to Superseded with a pointer.
 
+## 2026-10-25 — No maple leaf brand on the goose v2 breast
+
+**Context.** Looking at the version 2 necks, aj said the maple leaf brand on the breast "looks
+comical rather than fearful".
+
+**Decision.** aj asked for it to be removed and sent "skip design" for the one change. Version 2's
+spec sets `v2.design.maple.brand` to null, so no brand is baked; version 1 keeps its brand.
+
+**Why.** The brand undercut the horror. The blood-soaked breast feathers stay.
+
+**Status.** Standing. It reverses the brand part of the 2026-10-21 dead-maple passes for version 2
+only.
+
 ## 2026-10-24 — Goose v2 necks: vertebrae, bone spikes and a goose's S-curve
 
 **Context.** aj's QA check of #18 found that the version 2 necks still read as rigid, smooth tubes,
