@@ -27,6 +27,8 @@
   `build_goose.py --v2` now gives 1,094 parts, 297,820 triangles (2,180 under budget), 6.750 m,
   skin 1 piece. Under the dark neck colour the ridges read faintly; the spikes carry the
   segmentation from behind (`docs/art/reviews/goose-v2-necks/`).
+  aj liked the necks; on 2026-10-25 the maple leaf brand was removed from version 2 (1,093 parts,
+  still 297,820 triangles; version 1 keeps its brand and rebuilds at 272,380).
 - #19, #20 and #21: not started; #19 has 2,180 triangles of headroom, so it has to trim elsewhere.
   #21 now asks for one bone per vertebra (15 and 12).
 
