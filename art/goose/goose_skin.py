@@ -17,7 +17,8 @@ def fuse(soft_parts, skin_spec):
     """Returns (skin, shells): a goose_design.Mesh of the fused skin and its count of separate pieces."""
     source = g.mesh_parts(soft_parts)
     obj = _remeshed_object(source, skin_spec["voxel_m"])
-    per_part = [BVHTree.FromPolygons(m.verts, m.faces) for m in (g.mesh_parts([p]) for p in soft_parts)]
+    joins = [p for p in soft_parts if p["name"] in skin_spec["parts"]]  # muscle and ridges fuse but set no joins
+    per_part = [BVHTree.FromPolygons(m.verts, m.faces) for m in (g.mesh_parts([p]) for p in joins)]
     _smooth_joins(obj.data, per_part, skin_spec["join_width_m"], skin_spec["smooth_passes"])
     _decimate(obj, skin_spec["triangle_cap"])
     shells = _count_shells(obj.data)

@@ -92,8 +92,9 @@ def fused_mesh(spec, parts):
     soft = [p for p in parts if p["name"] in names]
     if len(soft) != len(names):
         sys.exit(f"build_goose.py: v2 skin parts not found: {sorted(names - {p['name'] for p in soft})}")
+    soft += [p for p in parts if p.get("fuse")]
     skin, shells = goose_skin.fuse(soft, spec["v2"]["skin"])
-    hard = g.mesh_parts([p for p in parts if p["name"] not in names])
+    hard = g.mesh_parts([p for p in parts if p["name"] not in names and not p.get("fuse")])
     offset = len(skin.verts)
     skin.verts += hard.verts
     skin.faces += [tuple(i + offset for i in face) for face in hard.faces]

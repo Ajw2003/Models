@@ -525,10 +525,138 @@
       "maple": {
         "note": "aj, 2026-10-25: no maple leaf brand on version 2's breast; it read as comical rather than fearful. The blood-soaked breast feathers stay",
         "brand": null
+      },
+      "legs": {
+        "scutes": false
+      },
+      "ribs": {
+        "note": "#19 design option 1B: each rib is a ridge inside the skin, and its middle third breaks out as bare bone",
+        "under_radius": 0.05,
+        "bone_radius": 0.032,
+        "bone_from": 0.3333,
+        "bone_to": 0.6667
+      },
+      "form": {
+        "note": "#19: muscle, a sagging belly and loose folds melted into the fused skin, and feathers over the joins; the shapes are the throwaway test's (docs/art/reviews/goose-v2-form-prototype/prototype_form.py)",
+        "seed": 7,
+        "muscles": [
+          {
+            "name": "pec",
+            "centre": [
+              0.36,
+              -0.98,
+              2.3
+            ],
+            "axes": "ZXY",
+            "radii": [
+              0.42,
+              0.3,
+              0.26
+            ],
+            "material": "PlumageBrown"
+          },
+          {
+            "name": "shoulder",
+            "centre": [
+              0.55,
+              -0.5,
+              2.5
+            ],
+            "axes": "XYZ",
+            "radii": [
+              0.3,
+              0.3,
+              0.22
+            ],
+            "material": "PlumageBrown"
+          },
+          {
+            "name": "thigh",
+            "centre": [
+              0.42,
+              -0.12,
+              1.42
+            ],
+            "axes": "ZXY",
+            "radii": [
+              0.34,
+              0.22,
+              0.26
+            ],
+            "material": "PlumageBrown"
+          }
+        ],
+        "belly": {
+          "centre": [
+            0,
+            0.05,
+            1.28
+          ],
+          "axes": "YXZ",
+          "radii": [
+            0.75,
+            0.55,
+            0.28
+          ],
+          "material": "BreastPale"
+        },
+        "folds": {
+          "from": [
+            0,
+            -0.92,
+            2.3
+          ],
+          "to": [
+            0,
+            -1.1,
+            2.85
+          ],
+          "heights": [
+            2.45,
+            2.62,
+            2.8
+          ],
+          "radius": 0.74,
+          "shrink": 0.12,
+          "thickness": 0.05
+        },
+        "hackles": {
+          "centre": [
+            0,
+            -1.05,
+            2.95
+          ],
+          "count": 22,
+          "radius": 0.42,
+          "length": [
+            0.4,
+            0.65
+          ]
+        },
+        "coverts": {
+          "count": 9,
+          "length": [
+            0.3,
+            0.42
+          ]
+        },
+        "thigh_feathers": {
+          "centre": [
+            0.42,
+            -0.12,
+            1.32
+          ],
+          "count": 13,
+          "radius": 0.27,
+          "length": [
+            0.38,
+            0.55
+          ]
+        }
       }
     },
     "skin": {
-      "note": "the soft parts melted into one closed skin: a voxel remesh, then smoothing only within join_width_m of where two soft parts meet, then a decimate down to triangle_cap. Colour and pattern are carried over from the nearest version 1 style surface until Models #20 re-bakes them",
+      "note": "the soft parts melted into one closed skin: a voxel remesh, then smoothing only within join_width_m of where two soft parts meet, then a decimate down to triangle_cap. Colour and pattern are carried over from the nearest version 1 style surface until Models #20 re-bakes them. Only the listed parts set where the joins are smoothed; the version 2 muscle, belly, folds and rib ridges (parts marked fuse) melt into the skin without being smoothed flat",
       "parts": [
         "body",
         "main_neck",
