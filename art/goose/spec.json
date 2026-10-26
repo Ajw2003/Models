@@ -530,11 +530,12 @@
         "scutes": false
       },
       "ribs": {
-        "note": "#19 design option 1B: each rib is a ridge inside the skin, and its middle third breaks out as bare bone",
+        "note": "#19 design option 1B: each rib is a ridge inside the skin, and its middle third breaks out as bare bone; bone_lift pushes the bone outward mid-rib so it clears the ridge",
         "under_radius": 0.05,
         "bone_radius": 0.032,
         "bone_from": 0.3333,
-        "bone_to": 0.6667
+        "bone_to": 0.6667,
+        "bone_lift": 0.06
       },
       "form": {
         "note": "#19: muscle, a sagging belly and loose folds melted into the fused skin, and feathers over the joins; the shapes are the throwaway test's (docs/art/reviews/goose-v2-form-prototype/prototype_form.py)",

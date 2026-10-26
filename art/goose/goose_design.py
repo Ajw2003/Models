@@ -769,23 +769,29 @@ def body_ribs(body, R=None):
         for k in range(5):
             t = 0.28 + 0.32 * k / 4
             arc = [a if side_sign > 0 else 360 - a for a in (52, 66, 80, 94, 108, 120)]
-            ctrl = []
+            ctrl, normals = [], []
             for m, a in enumerate(arc):
                 p, n, _ = surface(body, t + 0.012 * m, a)  # each rib sweeps slightly back as it goes down
                 ctrl.append(add(p, mul(n, 0.035 * math.sin(math.pi * (m + 0.5) / len(arc)))))
+                normals.append(n)
             size = 0.030 + 0.012 * math.sin(math.pi * k / 4)
             rib = tube(f"rib{k}_{tag}", ctrl, [size * 0.7, size, size, size * 0.9, size * 0.7, size * 0.45],
                        "ToothBone", step=0.04, segments=10)
-            parts += torn_rib(rib, R) if R else [rib]
+            parts += torn_rib(rib, ctrl, normals, R) if R else [rib]
     return parts
 
 
-def torn_rib(rib, R):
+def torn_rib(rib, ctrl, normals, R):
+    """The rib as a ridge fused into the skin, and the bare bone lifted out of the ridge's middle third
+    (the lift peaks mid-rib, so the bone's ends sink back under the skin)."""
     path = rib["sweep"]["path"]
     under = path[::3] + [path[-1]]
     ridge = tube(rib["name"] + "_under", under, [R["under_radius"]] * len(under), "PlumageBrown", step=0.04,
                  segments=10)
     ridge["fuse"] = True
+    lifted = [add(p, mul(n, R["bone_lift"] * math.sin(math.pi * m / (len(ctrl) - 1))))
+              for m, (p, n) in enumerate(zip(ctrl, normals))]
+    path = tube(rib["name"], lifted, [R["bone_radius"]] * len(lifted), "ToothBone", step=0.04)["sweep"]["path"]
     a, b = round(len(path) * R["bone_from"]), round(len(path) * R["bone_to"])
     bone = tube(rib["name"], path[a:b + 1], [R["bone_radius"]] * (b - a + 1), "ToothBone", step=0.04, segments=10)
     return [ridge, bone]
