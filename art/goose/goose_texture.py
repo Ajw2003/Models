@@ -168,7 +168,7 @@ def surface_patterns(G, kind, u, v):
 
 def build_shader(material, colour_hex, roughness, decal, decal_images, T, gain=1.0):
     """The baking shader for one material. T: the spec's "texture" block (blood and brand colours, strengths);
-    gain: this material's albedo multiplier from T["albedo_gain"]."""
+    gain: this material's albedo multiplier from T["albedo_gain"]; decal None: no breast brand."""
     G = Graph(material)
     pattern_uv = G.node("ShaderNodeUVMap", uv_map="Pattern").outputs[0]
     shape_uv = G.node("ShaderNodeUVMap", uv_map="Shape").outputs[0]
@@ -200,7 +200,24 @@ def build_shader(material, colour_hex, roughness, decal, decal_images, T, gain=1
     colour = G.vlerp(colour, blood, soaked)
     rough = G.lerp(rough, T["blood_roughness"], soaked)
 
-    # the breast brand, projected along the breast normal from the decal frame
+    if decal:
+        colour, rough, height = _brand(G, decal, decal_images, T, position, kind, colour, rough, height)
+
+    bump = G.node("ShaderNodeBump")
+    G.feed(bump.inputs["Strength"], T["bump_strength"])
+    G.feed(bump.inputs["Distance"], 0.01)
+    G.feed(bump.inputs["Height"], height)
+    bsdf = G.node("ShaderNodeBsdfPrincipled")
+    G.feed(bsdf.inputs["Base Color"], colour)
+    G.feed(bsdf.inputs["Roughness"], rough)
+    G.feed(bsdf.inputs["Metallic"], 0.0)
+    G.links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+    out = G.node("ShaderNodeOutputMaterial")
+    G.links.new(bsdf.outputs[0], out.inputs["Surface"])
+
+
+def _brand(G, decal, decal_images, T, position, kind, colour, rough, height):
+    """The breast brand, projected along the breast normal from the decal frame."""
     offset = G.vmath("SUBTRACT", position, decal["centre"])
     extent = 2 * g.DECAL_HALF_EXTENT * decal["size"]
     image_x = G.math("ADD", G.math("DIVIDE", G.vmath("DOT_PRODUCT", offset, decal["side"]), extent), 0.5)
@@ -219,18 +236,7 @@ def build_shader(material, colour_hex, roughness, decal, decal_images, T, gain=1
     colour = G.vlerp(colour, linear(T["brand_rim_hex"]), rim)
     rough = G.lerp(rough, T["brand_roughness"], interior)
     height = G.math("ADD", height, G.math("SUBTRACT", G.math("MULTIPLY", rim, 1.2), G.math("MULTIPLY", interior, 0.5)))
-
-    bump = G.node("ShaderNodeBump")
-    G.feed(bump.inputs["Strength"], T["bump_strength"])
-    G.feed(bump.inputs["Distance"], 0.01)
-    G.feed(bump.inputs["Height"], height)
-    bsdf = G.node("ShaderNodeBsdfPrincipled")
-    G.feed(bsdf.inputs["Base Color"], colour)
-    G.feed(bsdf.inputs["Roughness"], rough)
-    G.feed(bsdf.inputs["Metallic"], 0.0)
-    G.links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
-    out = G.node("ShaderNodeOutputMaterial")
-    G.links.new(bsdf.outputs[0], out.inputs["Surface"])
+    return colour, rough, height
 
 
 def decal_to_images(decal, pixels=1024):
@@ -260,12 +266,12 @@ def darken_by_occlusion(colour, occlusion, strength):
     colour.update()
 
 
-def bake(obj, spec, out_dir, pixels):
+def bake(obj, spec, out_dir, pixels, version=1):
     """Shade every material procedurally, smart-UV the mesh into "Bake", bake colour, normal and roughness,
     then swap the materials for one that reads the baked images. Returns the image file paths."""
     T = spec["texture"]
-    decal = next(p for p in g.build_parts(spec) if p["kind"] == "decal")
-    decal_images = decal_to_images(decal)
+    decal = next((p for p in g.build_parts(spec, version=version) if p["kind"] == "decal"), None)
+    decal_images = decal_to_images(decal) if decal else []
     by_name = {m["name"]: m for m in spec["materials"]}
     for material in obj.data.materials:
         m = by_name[material.name]

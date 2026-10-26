@@ -3,6 +3,86 @@
 The running log of what was decided in this repo, when and why. Newest entry at the top. Entries
 are never rewritten; a later decision flips an old entry's Status to Superseded with a pointer.
 
+## 2026-10-26 — Goose v2 form: muscle, sag, ribs with bone tearing through, feathers over the joins
+
+**Context.** #19 gives the fused version 2 body the shape of a starved, living animal, but only
+2,180 triangles were left of the 300,000 budget and the feathers over the joins cost 7,128. The
+proposal, with a throwaway test, is `docs/plans/2026-10-25-goose-v2-form.html`.
+
+**Decision.** aj approved "Design approved: goose v2 form 1B 2A":
+
+- Ribs (question 1): option B, the 10 rib bars become ridges inside the skin, and the middle third
+  of each rib breaks out as bare bone. The torn skin around it is painted in #20.
+- Leg rings (question 2): option A, the five rings on each shank go now; #20 paints continuous
+  scales.
+
+Muscle at the chest, shoulders and thighs, a sagging belly, three folds at the neck root and the
+feathers over the joins (22 hackles, 9 coverts per shoulder, 13 feathers per thigh) come with it.
+
+**Why.** Turning the rib bars and leg rings into skin pays for the feathers; the exposed bone
+matches the neck spikes aj chose. Rejected: ridges alone; keeping the rings until #20. It leaves
+892 triangles, so #20 and #21 must add none.
+
+**Status.** Standing. It adds to the 2026-10-24 goose v2 skin and necks entries below.
+
+## 2026-10-25 — No maple leaf brand on the goose v2 breast
+
+**Context.** Looking at the version 2 necks, aj said the maple leaf brand on the breast "looks
+comical rather than fearful".
+
+**Decision.** aj asked for it to be removed and sent "skip design" for the one change. Version 2's
+spec sets `v2.design.maple.brand` to null, so no brand is baked; version 1 keeps its brand.
+
+**Why.** The brand undercut the horror. The blood-soaked breast feathers stay.
+
+**Status.** Standing. It reverses the brand part of the 2026-10-21 dead-maple passes for version 2
+only.
+
+## 2026-10-24 — Goose v2 necks: vertebrae, bone spikes and a goose's S-curve
+
+**Context.** aj's QA check of #18 found that the version 2 necks still read as rigid, smooth tubes,
+and asked for necks that can move and show their vertebrae, like a real Canada goose's. A goose's
+neck has 17 to 18 vertebrae (Frontiers in Veterinary Science, 2025, doi 10.3389/fvets.2025.1531363).
+The proposal, with a throwaway test, is `docs/plans/2026-10-24-goose-v2-necks.html`.
+
+**Decision.** aj approved "Design approved: goose v2 necks 1B 2A 3A":
+
+- Vertebrae (question 1): option B, ridges under the skin plus one bone spike per vertebra along
+  the back, replacing the main neck's 13 spikes.
+- Shape (question 2): option A, each neck rests in an S-curve; the heads do not move.
+- Bending (question 3): option A, one rig bone per vertebra in #21: 15 on the main neck, 12 on
+  each side neck.
+
+The work is #25, with steps #26 and #27.
+
+**Why.** Ridges and an S-curve are what make a goose's neck read as jointed and flexible; aj chose
+the more monstrous exposed bone. One bone per vertebra lets every joint bend without stretching the
+ridges. Rejected: ridges alone; today's straight lines; keeping 7 and 6 bones.
+
+**Status.** Standing. It supersedes nothing; it adds to the 2026-10-24 goose v2 skin entry below.
+
+## 2026-10-24 — Goose v2 skin (#18): melt and smooth, fork at 3.05 m, colours carried over
+
+**Context.** #18 (one fused skin and a forking neck root) is the first step of the version 2 goose
+(#17). A throwaway test (`docs/art/reviews/goose-v2-prototype/prototype_fuse.py`) fused the soft
+parts into one closed skin. The plan page is `docs/plans/2026-10-24-goose-v2-skin.html`.
+
+**Decision.** aj approved "Design approved: goose v2 skin. Build plan approved: goose v2 skin 1A 2A 3A":
+
+- Method (question 1): option A, a voxel remesh of the soft parts, smoothing only near the joins,
+  then a decimate to a 75,000 triangle skin.
+- Fork (question 2): option A, the root splits just above the breast, at about 3.05 m.
+- Texture until #20 (question 3): option A, each skin face copies the nearest version 1 surface's
+  colour and pattern, baked into `art/goose/textures_v2/`.
+
+The steps are #22 (design numbers), #23 (fuse and one-shell check) and #24 (build and review).
+
+**Why.** The test came out closed in both runs and the join width is one number; cutting and
+stitching eight tubes is fragile. The side heads sit at 4.05 m, so a higher fork leaves stubby side
+necks. A review sheet beside the concept needs colour to be judged.
+
+**Status.** Standing.
+
 ## 2026-10-24 — Goose model version 2: one living beast
 
 **Context.** aj asked for a senior game designer's critique of the goose model, textures and

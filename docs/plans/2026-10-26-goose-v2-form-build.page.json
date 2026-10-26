@@ -1,0 +1,29 @@
+{
+  "title": "Goose v2 Form Build",
+  "eyebrow": "Build plan for approval · Models #19, the goose v2 form · design approved: bone tearing through the ribs, leg rings removed",
+  "approval": "Build plan approved: goose v2 form",
+  "short": {
+    "lead": "You approved ribs with bare bone tearing through the middle, and removing the leg rings now. This is how I build it. It reuses the throwaway test's shapes and the version 2 build that already exists. It takes two steps, filed as #29 and #30 under #19.",
+    "hint": "Tap a step to see what it changes.",
+    "key": [["I build it", ""], ["Needs you", "you"]],
+    "items": [
+      ["hammer", "#29", "Put the muscle, belly sag, neck folds, torn ribs and feathers in the design", "", "spec.json's version 2 block gains a form section holding the muscle masses, the belly, the three neck-root folds and the feather counts. goose_design.py's version 2 mode adds them as soft parts that blend smoothly into the skin. It turns the 10 rib bars into ridges, with the middle third of each rib left out as bare bone, and removes the five rings on each shank. It also adds 22 hackles (matted neck feathers), 9 coverts (short wing feathers) per shoulder and 13 feathers per thigh. goose_skin.py smooths only where the original 8 body parts meet, so the new muscle keeps its shape. Version 1 still gives 1,072 parts and 272,380 triangles.", "Nothing from you.", {"src": "docs/art/reviews/goose-v2-form-prototype/ribs_torn_flank.png", "alt": "Throwaway test: flank with rib ridges and bare bone tearing through", "caption": "The look being built, from the throwaway test (untextured)."}],
+      ["check", "#30", "Rebuild goose_v2 and check it", "", "The full version 2 build runs with the same checks: under 300,000 triangles, 6.75 m tall within 0.15 m, and the skin staying in 1 piece. The test measured 299,108 triangles, so if that holds, 892 triangles of room are left. The build refuses to export if the total goes over 300,000. Then I re-render the close-ups and views, rebuild the review sheet and update the docs.", "Nothing from you."],
+      ["eye", "QA", "You check the new body", "you", "A new QA page shows the chest, flank and hip next to the current version 2 model.", "Look over the QA page and send \"QA passed: goose v2 form\", or say what to change."]
+    ]
+  },
+  "changes": [
+    ["chg", "art/goose/spec.json", "A new form section in the v2 block.", ["No muscle, belly or feather settings", "Muscle masses, belly, folds and feather counts"], "Version 1 ignores all of it.", null, null],
+    ["chg", "art/goose/goose_design.py", "Version 2 mode adds the form.", ["Rib bars on the flanks and five rings per shank", "Rib ridges with bare bone, smooth shanks, muscle and feathers"], "The shapes are the ones from the throwaway test (docs/art/reviews/goose-v2-form-prototype/prototype_form.py).", null, null],
+    ["chg", "art/goose/goose_skin.py", "Join smoothing counts only the original parts.", ["Smoothing near any two soft parts", "Smoothing only where the body, necks, wing arms and legs meet"], "Without this, the muscle masses would be smoothed flat into the body.", null, null],
+    ["keep", "build_goose.py and goose_texture.py", "Unchanged.", null, "The build, its checks and the placeholder colour work as they are. The torn skin and leg scales are painted in #20 (textures).", null, null]
+  ],
+  "choices": [],
+  "wrapup": {
+    "summary": "How the approved goose v2 form is built: two steps, #29 and #30.",
+    "changing": "spec.json, goose_design.py's version 2 mode and goose_skin.py, then the goose_v2 files and their review renders.",
+    "blocking": "Your approval of this build plan.",
+    "next": "I build #29 and #30, then send you a QA page.",
+    "todo": ["Send \"Build plan approved: goose v2 form\", or say what to change."]
+  }
+}

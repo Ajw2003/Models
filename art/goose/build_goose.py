@@ -5,11 +5,17 @@
 
   GOOSE_TEXTURE_PX=1024 python3.11 art/goose/build_goose.py   # quicker, lower-resolution bake
 
+  python3.11 art/goose/build_goose.py --v2   # version 2: goose_v2.* and textures_v2/, version 1 untouched
+
 Writes art/goose/goose.glb, goose.fbx and goose.blend next to this script, and the baked textures to
 art/goose/textures/. The shapes come from goose_design.py (pure Python, shared with the concept
 sheet); this script turns them into one Blender mesh, checks it against the spec, has
 goose_texture.py bake its surfaces into one texture set, and exports. A fix to the shape
 is a fix to spec.json or goose_design.py, never a hand edit of the output.
+
+With --v2 the design takes the spec's "v2" numbers (one neck root forking into three) and goose_skin.py
+fuses the soft parts into one closed skin before the hard parts are added; the validator then also
+requires that skin to be a single piece.
 """
 import os, sys
 
@@ -21,6 +27,7 @@ except ImportError:
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import goose_design as g  # noqa: E402  (bpy must be imported first)
+import goose_skin  # noqa: E402
 import goose_texture  # noqa: E402
 
 HEIGHT_TOLERANCE_M = 0.15
@@ -79,9 +86,28 @@ def build_mesh(spec, parts_mesh, mats):
     return obj
 
 
-def validate(spec, obj, face_mats, mats):
+def fused_mesh(spec, parts):
+    """The soft parts fused into one skin, followed by the hard parts as they are, as one Mesh."""
+    names = set(spec["v2"]["skin"]["parts"])
+    soft = [p for p in parts if p["name"] in names]
+    if len(soft) != len(names):
+        sys.exit(f"build_goose.py: v2 skin parts not found: {sorted(names - {p['name'] for p in soft})}")
+    soft += [p for p in parts if p.get("fuse")]
+    skin, shells = goose_skin.fuse(soft, spec["v2"]["skin"])
+    hard = g.mesh_parts([p for p in parts if p["name"] not in names and not p.get("fuse")])
+    offset = len(skin.verts)
+    skin.verts += hard.verts
+    skin.faces += [tuple(i + offset for i in face) for face in hard.faces]
+    for field in ("materials", "patterns", "pattern_uv", "shape_uv"):
+        getattr(skin, field).extend(getattr(hard, field))
+    return skin, shells
+
+
+def validate(spec, obj, face_mats, mats, skin_shells=None):
     mesh = obj.data
     problems = []
+    if skin_shells is not None and skin_shells != 1:
+        problems.append(f"the fused skin is {skin_shells} separate pieces, not one")
     tris = sum(len(p.vertices) - 2 for p in mesh.polygons)
     if tris > spec["triangle_budget"]:
         problems.append(f"{tris} tris is over the {spec['triangle_budget']} budget")
@@ -106,26 +132,34 @@ def validate(spec, obj, face_mats, mats):
 
 
 def main():
+    is_v2 = "--v2" in sys.argv[1:]
+    suffix = "_v2" if is_v2 else ""
     spec = g.load_spec()
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    parts = g.build_parts(spec)
-    parts_mesh = g.mesh_parts(parts)
+    parts = g.build_parts(spec, version=2 if is_v2 else 1)
+    skin_shells = None
+    if is_v2:
+        parts_mesh, skin_shells = fused_mesh(spec, parts)
+    else:
+        parts_mesh = g.mesh_parts(parts)
     mats = make_materials(spec)
     obj = build_mesh(spec, parts_mesh, mats)
-    tris, height = validate(spec, obj, parts_mesh.materials, mats)
+    tris, height = validate(spec, obj, parts_mesh.materials, mats, skin_shells)
     pixels = int(os.environ.get("GOOSE_TEXTURE_PX", spec["texture"]["pixels"]))
-    textures = goose_texture.bake(obj, spec, os.path.join(HERE, "textures"), pixels)
+    textures = goose_texture.bake(obj, spec, os.path.join(HERE, "textures" + suffix), pixels,
+                                version=2 if is_v2 else 1)
 
     bpy.context.view_layer.objects.active = obj
     obj.select_set(True)
-    out = lambda ext: os.path.join(HERE, "goose" + ext)
+    out = lambda ext: os.path.join(HERE, "goose" + suffix + ext)
     bpy.ops.export_scene.gltf(filepath=out(".glb"), export_format="GLB")
     bpy.ops.export_scene.fbx(filepath=out(".fbx"), axis_forward="-Z", axis_up="Y",
                              apply_scale_options="FBX_SCALE_UNITS", path_mode="RELATIVE")
     bpy.ops.wm.save_as_mainfile(filepath=out(".blend"), compress=True)
     xs = [v.co.x for v in obj.data.vertices]
     print(f"build_goose: {len(parts)} parts, {tris} tris, height {height:.3f} m, "
-          f"span {max(xs) - min(xs):.2f} m, {len(mats)} materials baked to {pixels} px textures -> goose.glb .fbx .blend")
+          f"span {max(xs) - min(xs):.2f} m, {len(mats)} materials baked to {pixels} px textures"
+          + (f", fused skin {skin_shells} piece" if is_v2 else "") + f" -> goose{suffix}.glb .fbx .blend")
 
 
 main()

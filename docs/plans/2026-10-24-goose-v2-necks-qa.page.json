@@ -1,0 +1,38 @@
+{
+  "title": "Goose v2 Necks QA",
+  "eyebrow": "Ready for your check · Models #25, the goose v2 necks, with #18's fused skin · built on claude/project-thread-09ugci, not pushed",
+  "qa": {
+    "feature": "goose v2 necks",
+    "base": "origin/AjsAgent/import-models",
+    "unverified": [
+      "Nothing bends yet: the necks only look jointed. The 15 bones in the main neck and 12 in each side neck are built in #21 (the rig), and only a pose test there will prove the necks can move",
+      "Under the dark neck colour, the vertebra ridges read faintly; the bone spikes carry most of the segmentation, and they show best from behind",
+      "The colour is still the stand-in carried over from version 1, with a hard, ragged black-to-pale line across the breast. #20 (textures) will replace this colour",
+      "Nobody has opened goose_v2.glb or goose_v2.fbx in a game engine; the only thing that has run is the export from Blender",
+      "The model is 297,820 triangles, so #19 (muscle and feathers) has only 2,180 triangles left of the 300,000 budget and will have to save triangles elsewhere"
+    ]
+  },
+  "short": {
+    "lead": "The necks are rebuilt as you approved. Each one rests in a goose's S-curve. The main neck has 15 vertebra ridges and each side neck has 12, with a bone spike tearing out of every vertebra along the back. The heads have not moved. The build passed all its checks: 297,820 triangles against the 300,000 budget, 6.750 m tall, and a skin that is still one piece. Version 1 is unchanged.",
+    "hint": "Tap a step to see what was checked and what it needs from you.",
+    "key": [["Done", "done"], ["Needs you", "you"]],
+    "items": [
+      ["check", "From behind", "A spike and a ridge at every vertebra", "done", "Seen from behind, the row of spikes and the bumps between them show each neck as a chain of vertebrae, from the root up to the head.", "Nothing from you.", {"src": "docs/art/reviews/goose-v2-necks/neck_back_quarter.png", "alt": "The three necks from behind, each with a row of bone spikes and ridges", "caption": "From behind: one spike per vertebra."}],
+      ["eye", "From the side", "The S-curve", "done", "Each neck leans forward low, bends back in the middle and tips forward to the head. The spikes along the back follow the curve.", "Nothing from you.", {"src": "docs/art/reviews/goose-v2-necks/neck_side_close.png", "alt": "A side neck from the side, curving in an S with spikes along its back", "caption": "From the side."}],
+      ["list", "Your check", "Look at the necks and the review sheet", "you", "The sheet docs/art/reviews/goose-v2-review.png shows the concept, the four views and the join close-ups. Say whether the necks now read as jointed and flexible. If the ridges should show more strongly, that is one number per ridge in spec.json, and I can raise it.", "Your QA check.", {"src": "docs/art/reviews/goose-v2-review.png", "alt": "Review sheet for goose_v2 with the new necks", "caption": "The review sheet."}]
+    ]
+  },
+  "changes": [
+    ["chg", "Necks from the side", "Smooth straight tubes became S-curved, spiked necks.", ["Smooth tubes in gentle straight lines", "S-curves with a spike per vertebra"], "This view uses the same camera position as the version you rejected, so the two images compare directly.", null, null, {"before": {"src": "docs/art/reviews/goose-v2-necks/before_neck_base_side.png", "alt": "The rejected version: smooth neck tubes from the side"}, "after": {"src": "docs/art/reviews/goose-v2-joins/neck_base_side.png", "alt": "The new necks from the side"}, "caption": "The version you rejected, then the new necks."}],
+    ["chg", "Necks from the front", "The front stays smooth, over the windpipe.", ["Smooth tubes", "S-curves; the ridges sit on the back and sides"], "From the front you mostly see the smooth throat, as on a real goose.", null, null, {"before": {"src": "docs/art/reviews/goose-v2-necks/before_neck_base_front.png", "alt": "The rejected version from the front"}, "after": {"src": "docs/art/reviews/goose-v2-joins/neck_base_front.png", "alt": "The new necks from the front"}, "caption": "The version you rejected, then the new necks, from the front."}],
+    ["chg", "#21 (the rig)", "Issue #21 now asks for one bone per vertebra.", ["7 main-neck bones and 6 per side neck", "15 in the main neck and 12 per side neck"], "Only the issue text changed; the rig is built in #21.", null, null],
+    ["keep", "Version 1", "Unchanged.", null, "python3 art/goose/goose_design.py still reports 1,072 parts and 272,380 triangles for version 1, and its files are untouched.", null, null]
+  ],
+  "wrapup": {
+    "summary": "The goose v2 necks are built: S-curves with a vertebra ridge and a bone spike at every vertebra.",
+    "changing": "spec.json's v2 block, goose_design.py's version 2 mode, and the goose_v2 files with their renders.",
+    "blocking": "Your QA check, and your go-ahead to push the branch.",
+    "next": "Once you pass it, I push claude/project-thread-09ugci and start #19 (muscle, sag, ribs under the skin, feathers over the joins, feathered thighs).",
+    "todo": ["Look at the necks and the review sheet.", "Send \"QA passed: goose v2 necks\", or say what to change."]
+  }
+}

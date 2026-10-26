@@ -29,7 +29,7 @@ and exports (`build_goose.py:122`).
 - The README's rebuild commands name the art-pipeline scripts by their old path in
   AjsClaudeCodeTools; they now live in `Ajw2003/claude-art-pipeline`.
 
-## Version 2 model (approved 2026-10-24, not built yet)
+## Version 2 model (approved 2026-10-24, being built under #18)
 
 `goose_design.py` gains a version 2 mode and `build_goose.py` writes `goose_v2.blend`, `.glb` and
 `.fbx` with textures in `art/goose/textures_v2/`; version 1's files and `art/goose/textures/` are not
@@ -42,3 +42,32 @@ upper necks at higher detail. The triangle budget stays 300,000.
 Trap: `build_rig.py` assigns weights by named design part (`g.mesh_parts`). A merged skin is no
 longer split that way, so the version 2 rig carries weights over from the current rig by nearest
 surface instead.
+
+How the skin is fused (#18, plan `docs/plans/2026-10-24-goose-v2-skin.html`, approved 1A 2A 3A):
+`spec.json` holds a `v2` block that `goose_design.build_parts(version=2)` merges over the design
+numbers: one neck root from the chest whose top, at about 3.05 m, is where the two side necks start;
+the heads keep version 1's positions. `goose_skin.py` (bpy) meshes the soft parts listed in
+`v2.skin.parts`, melts them with a voxel remesh (`voxel_m`), relaxes only vertices within
+`join_width_m` of a second soft part so each crease fills into a curve, and decimates to
+`triangle_cap`. Each new face then copies the material, pattern and texture coordinates of the
+nearest unfused face, mapping all its corners through that one face so a face across a part's
+wrap-around seam does not smear; this stand-in colour is replaced when #20 re-bakes. `build_goose.py
+--v2` adds the hard parts unchanged and refuses to export unless the skin is one piece.
+
+Necks (#25, design `docs/plans/2026-10-24-goose-v2-necks.html`, approved 1B 2A 3A): the v2 neck
+paths rest in an S-curve with the heads unmoved; a `v2.vertebrae` block sets 15 vertebrae on the
+main neck and 12 on each side neck, each a ridge under the skin (strongest along the back) with a
+bone spike tearing out of it, in place of version 1's 13 neck spikes. #21 rigs one bone per
+vertebra.
+
+Form (#19, design `docs/plans/2026-10-25-goose-v2-form.html`, approved 1B 2A): a `v2.design.form`
+block adds breast, shoulder and thigh muscle, a sagging belly and three folds at the neck root as
+parts marked `fuse`, which `build_goose.py --v2` melts into the skin alongside `v2.skin.parts`;
+`goose_skin.fuse` smooths only where the listed parts meet, so the muscle keeps its shape. With
+`v2.design.ribs`, `body_ribs` turns each rib into a fused ridge and lifts its middle third out as
+bare bone (`bone_lift`). `v2.design.legs.scutes` false drops the shank rings. The form block also
+adds 22 hackles at the neck root, 9 coverts per shoulder and 13 feathers per thigh, from its own
+random seed so the other parts' feathers do not change.
+
+Brand: `goose_texture.bake(..., version=)` takes its decal from that version's parts; version 2 sets
+`v2.design.maple.brand` to null, so its breast has no maple leaf and the brand shader step is skipped.

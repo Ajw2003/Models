@@ -539,6 +539,45 @@ def hackles(name, neck, count, length_range, rng):
     return parts
 
 
+def vertebrae(name, neck, chain, V):
+    """Version 2: ridge a neck tube at each vertebra, from chain["start"] of its length, and return a bone
+    spike per vertebra. Angle 0 is the back of the neck (the tube's ref side); see docs/4-systems/goose-build.md."""
+    sweep, R, S = neck["sweep"], V["ridge"], V["spike"]
+    path, count = sweep["path"], chain["count"]
+    travelled = [0.0]
+    for a, b in zip(path, path[1:]):
+        travelled.append(travelled[-1] + length(sub(b, a)))
+    total = travelled[-1]
+    start = chain["start"] * total
+    width = len(neck["rings"][0])
+    for i, ring in enumerate(neck["rings"]):
+        if travelled[i] < start:
+            continue
+        phase = (travelled[i] - start) / (total - start) * count % 1.0
+        joint = math.cos(math.pi * phase) ** 6
+        waist = math.sin(math.pi * phase) ** 2
+        ramp = min(1.0, (travelled[i] - start) / (0.08 * total))
+        centre = path[i]
+        for j, p in enumerate(ring):
+            a = 2 * math.pi * j / width
+            back = max(0.0, math.cos(a)) ** 6
+            side = (abs(math.sin(a)) * max(0.0, math.cos(a) + 0.35)) ** 4
+            swell = (R["joint"] * joint - R["waist"] * waist + R["back"] * back * joint + R["side"] * side * joint)
+            ring[j] = add(centre, mul(sub(p, centre), 1.0 + ramp * swell))
+    spikes = []
+    for k in range(count):
+        t = chain["start"] + (1 - chain["start"]) * (k + 0.5) / count
+        if t > S["last"]:  # the top vertebrae sit inside the head's hackles and jaw
+            continue
+        p, n, r = surface(neck, t, 0)
+        tangent = sweep["frames"][int(t * (len(path) - 1))][0]
+        size = S["length"] * r / S["per_radius"]
+        spikes.append(cone(f"{name}_vertebra{k}", add(p, mul(n, -0.04)),
+                           combine((p, 1), (n, size), (tangent, size * S["lean"])),
+                           S["width"] * r / S["per_radius"] + 0.015, "ToothBone"))
+    return spikes
+
+
 def build_necks(D, rng):
     parts = []
     main = tube("main_neck", D["main_neck"]["path"], D["main_neck"]["radii"], "GooseBlack",
@@ -546,7 +585,10 @@ def build_necks(D, rng):
     main["soak"] = 0.8  # blood run down from the jaws
     parts.append(main)
     parts += hackles("main_neck", main, 34, (0.32, 0.6), rng)
-    for k in range(13):  # bone ridge down the back of the neck
+    V = D.get("vertebrae")  # version 2 only: a ridge and a bone spike per vertebra replace the 13 spikes
+    if V:
+        parts += vertebrae("main_neck", main, V["main"], V)
+    for k in range(0 if V else 13):  # bone ridge down the back of the neck
         t = 0.10 + 0.78 * k / 12
         p, n, r = surface(main, t, 0)
         tangent = main["sweep"]["frames"][int(t * (len(main["sweep"]["path"]) - 1))][0]
@@ -563,6 +605,8 @@ def build_necks(D, rng):
         neck["soak"] = 0.78
         parts.append(neck)
         parts += hackles(f"side_neck_{tag}", neck, 18, (0.22, 0.42), rng)
+        if V:
+            parts += vertebrae(f"side_neck_{tag}", neck, V["side"], V)
         head = dict(D["side_head"])
         if sign < 0:
             head["base"] = mirror(head["base"])
@@ -576,7 +620,10 @@ def build_wing(W, sign, rng):
     shoulder, elbow, wrist, tip = (pick(W[k]) for k in ("shoulder", "elbow", "wrist", "tip"))
     tag = "R" if sign > 0 else "L"
     parts = []
-    arm = tube(f"wing_arm_{tag}", [shoulder, elbow, wrist, tip], W["radii"], "PlumageBrown", step=0.03,
+    control, radii = [shoulder, elbow, wrist, tip], W["radii"]
+    if "root" in W:  # version 2: the arm reaches into the body so the fused skin joins it there
+        control, radii = [pick(W["root"])] + control, [W["root_radius"]] + radii
+    arm = tube(f"wing_arm_{tag}", control, radii, "PlumageBrown", step=0.03,
                segments=20, ref=(0.0, -1.0, 0.0))
     parts.append(arm)
 
@@ -641,7 +688,7 @@ def build_leg(L, sign):
     parts = [tube(f"leg_{tag}", [hip, knee, ankle, foot], L["radii"], "LegDark", step=0.02, segments=28,
                   lumps=(0.008, 12.0, 31 if sign > 0 else 32),
                   ref=(0.0, -1.0, 0.0))]
-    for k in range(5):  # scutes: raised scale rings on the shank
+    for k in range(5 if L.get("scutes", True) else 0):  # scutes: raised scale rings; version 2 paints scales instead
         c = lerp(ankle, foot, 0.1 + 0.18 * k)
         r = L["radii"][2] * 1.04
         axis = norm(sub(foot, ankle))
@@ -714,30 +761,99 @@ def build_back_spines(body, rng):
     return parts
 
 
-def body_ribs(body):
-    """Bare ribs breaking through the matted flanks: the starved-beast look, where the eyes used to be."""
+def body_ribs(body, R=None):
+    """Bare ribs breaking through the matted flanks: the starved-beast look, where the eyes used to be.
+    With R (version 2), each rib becomes a ridge fused into the skin, and only its middle breaks out as bone."""
     parts = []
     for side_sign, tag in ((1, "R"), (-1, "L")):
         for k in range(5):
             t = 0.28 + 0.32 * k / 4
             arc = [a if side_sign > 0 else 360 - a for a in (52, 66, 80, 94, 108, 120)]
-            ctrl = []
+            ctrl, normals = [], []
             for m, a in enumerate(arc):
                 p, n, _ = surface(body, t + 0.012 * m, a)  # each rib sweeps slightly back as it goes down
                 ctrl.append(add(p, mul(n, 0.035 * math.sin(math.pi * (m + 0.5) / len(arc)))))
+                normals.append(n)
             size = 0.030 + 0.012 * math.sin(math.pi * k / 4)
-            parts.append(tube(f"rib{k}_{tag}", ctrl, [size * 0.7, size, size, size * 0.9, size * 0.7, size * 0.45],
-                              "ToothBone", step=0.04, segments=10))
+            rib = tube(f"rib{k}_{tag}", ctrl, [size * 0.7, size, size, size * 0.9, size * 0.7, size * 0.45],
+                       "ToothBone", step=0.04, segments=10)
+            parts += torn_rib(rib, ctrl, normals, R) if R else [rib]
     return parts
 
 
-def build_parts(spec=None):
+def torn_rib(rib, ctrl, normals, R):
+    """The rib as a ridge fused into the skin, and the bare bone lifted out of the ridge's middle third
+    (the lift peaks mid-rib, so the bone's ends sink back under the skin)."""
+    path = rib["sweep"]["path"]
+    under = path[::3] + [path[-1]]
+    ridge = tube(rib["name"] + "_under", under, [R["under_radius"]] * len(under), "PlumageBrown", step=0.04,
+                 segments=10)
+    ridge["fuse"] = True
+    lifted = [add(p, mul(n, R["bone_lift"] * math.sin(math.pi * m / (len(ctrl) - 1))))
+              for m, (p, n) in enumerate(zip(ctrl, normals))]
+    path = tube(rib["name"], lifted, [R["bone_radius"]] * len(lifted), "ToothBone", step=0.04)["sweep"]["path"]
+    a, b = round(len(path) * R["bone_from"]), round(len(path) * R["bone_to"])
+    bone = tube(rib["name"], path[a:b + 1], [R["bone_radius"]] * (b - a + 1), "ToothBone", step=0.04, segments=10)
+    return [ridge, bone]
+
+
+def build_form(F):
+    """Version 2 (#19): muscle, the belly and folds at the neck root, marked to fuse into the skin, then
+    the feathers that hide the joins."""
+    rng = random.Random(F["seed"])
+    axis = {"X": (1.0, 0.0, 0.0), "Y": (0.0, 1.0, 0.0), "Z": UP}
+    def mass(name, m, centre):
+        part = ellipsoid(name, centre, tuple(axis[c] for c in m["axes"]), tuple(m["radii"]), m["material"])
+        part["fuse"] = True
+        return part
+    parts = []
+    for sign, tag in ((1, "R"), (-1, "L")):
+        for m in F["muscles"]:
+            c = tuple(m["centre"])
+            parts.append(mass(f"{m['name']}_{tag}", m, c if sign > 0 else mirror(c)))
+    parts.append(mass("belly", F["belly"], tuple(F["belly"]["centre"])))
+    fo = F["folds"]
+    for k, z in enumerate(fo["heights"]):
+        c = lerp(fo["from"], fo["to"], (z - fo["from"][2]) / (fo["to"][2] - fo["from"][2]))
+        r = fo["radius"] - fo["shrink"] * k
+        ring = [add(c, (r * math.cos(2 * math.pi * j / 20), 0.75 * r * math.sin(2 * math.pi * j / 20),
+                        0.03 * math.sin(4 * math.pi * j / 20))) for j in range(20)]
+        fold = tube(f"fold{k}", ring, [fo["thickness"]] * 20, "GooseBlack", step=0.05, segments=10, closed=True)
+        fold["fuse"] = True
+        parts.append(fold)
+
+    def ring_of_feathers(prefix, centre, f, material):
+        out = []
+        for k in range(f["count"]):
+            a = 2 * math.pi * k / f["count"] + rng.uniform(-0.2, 0.2)
+            root = add(centre, (f["radius"] * math.cos(a), 0.8 * f["radius"] * math.sin(a), rng.uniform(-0.05, 0.08)))
+            n = norm(sub(root, centre))
+            d = norm(combine((n, 0.35), (UP, -1.0)))
+            out.append(feather(f"{prefix}{k}", root, d, n, rng.uniform(*f["length"]), 0.09, material, rng, curl=0.1,
+                               ragged=0.6, stations=6))
+        return out
+    parts += ring_of_feathers("root_hackle", tuple(F["hackles"]["centre"]), F["hackles"], "GooseBlack")
+    for sign, tag in ((1, "R"), (-1, "L")):
+        parts += [feather(f"shoulder_covert{k}_{tag}", (sign * (0.55 + 0.05 * k), -0.62 + 0.03 * (k % 3), 2.72 - 0.02 * k),
+                          norm((sign * 0.35, 0.25, -1.0)), norm((sign * 1.0, -0.3, 0.2)),
+                          rng.uniform(*F["coverts"]["length"]), 0.12, "PlumageBrown", rng, curl=0.06, ragged=0.4,
+                          stations=6) for k in range(F["coverts"]["count"])]
+        c = tuple(F["thigh_feathers"]["centre"])
+        parts += ring_of_feathers(f"thigh_{tag}", c if sign > 0 else mirror(c), F["thigh_feathers"], "PlumageBrown")
+    return parts
+
+
+def build_parts(spec=None, version=1):
+    """version=2 swaps in the spec's "v2" design numbers (the neck root that forks into three); the
+    soft parts are still separate here, and build_goose.py --v2 fuses them into one skin."""
     spec = spec or load_spec()
     D = spec["design"]
+    if version == 2:
+        D = {k: {**D[k], **v} if isinstance(v, dict) and k in D else v for k, v in {**D, **spec["v2"]["design"]}.items()}
     rng = random.Random(D["eye_seed"])
     body = build_body(D)
     parts = [body]
-    parts += body_ribs(body)
+    parts += body_ribs(body, D.get("ribs"))
     parts += build_back_spines(body, rng)
     parts += build_necks(D, rng)
     for sign in (1, -1):
@@ -745,13 +861,15 @@ def build_parts(spec=None):
         parts += build_leg(D["legs"], sign)
     parts += build_tail(D["tail"], rng)
     parts += build_maple(D["maple"], body)
+    if "form" in D:
+        parts += build_form(D["form"])
     return parts
 
 
 def build_maple(M, body):
     """The brand and the blood-soaked feathers on the breast."""
     rng = random.Random(M["seed"])
-    out = breast_brand(M["brand"])
+    out = breast_brand(M["brand"]) if M["brand"] else []  # version 2 has none: aj found it comical, not fearful
     out += soaked_breast_feathers(body, M["soaked_feathers"], rng)
     return out
 

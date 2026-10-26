@@ -1,0 +1,38 @@
+{
+  "title": "Goose v2 Form",
+  "eyebrow": "Design for approval · Models #19, muscle, sag, ribs under the skin and feathers over the joins · nothing changed in the model yet",
+  "approval": "Design approved: goose v2 form",
+  "short": {
+    "lead": "#19 gives the fused goose body the shape of a starved, living animal. You approved the list of changes in the goose model review, so this page covers how they fit. Only 2,180 triangles are left in the 300,000 budget, and the feathers over the joins alone cost 7,128. I ran a throwaway test that pays for them by turning the rib tubes and leg rings into the skin itself. Both rib options (ridges only, and ridges with bone breaking through) stayed inside the budget, and the skin stayed one piece. The pictures are untextured. Two questions follow.",
+    "hint": "Tap a step to see what it changes.",
+    "key": [["Recommendation", ""], ["Needs you first", "you"]],
+    "items": [
+      ["hammer", "Muscle and sag", "Muscle at the chest and shoulders, a sagging belly and folds at the neck root", "", "Rounded masses melt into the skin: breast muscle either side of the neck root, shoulder muscle where each wing arm joins, and thigh muscle over each hip. A heavy belly hangs below the body. Three loose folds of skin wrap its base. All of it is part of the one skin, so it adds no triangles.", "Nothing from you.", {"src": "docs/art/reviews/goose-v2-form-prototype/chest_front.png", "alt": "Untextured test render of the chest with breast muscle, folds at the neck root and a sagging belly", "caption": "Throwaway test: chest muscle, neck folds and the belly."}],
+      ["list", "Ribs", "Ribs pushing up under the skin", "you", "The 10 separate rib bones that sit on top of the flanks are replaced by ridges inside the skin, which frees 4,680 triangles. You choose whether bare bone also breaks through the middle of each rib.", "Your answer to \"How should the ribs show?\"", {"src": "docs/art/reviews/goose-v2-form-prototype/ribs_under_flank.png", "alt": "Untextured flank with rib ridges under the skin", "caption": "Ribs under the skin."}],
+      ["bulb", "Feathers", "Feathers over every join", "", "22 matted feathers (hackles) hang around the neck root, 9 short overlapping feathers (coverts) cover each wing shoulder, and 13 ragged feathers hang over each thigh. Together they cost 7,128 triangles.", "Nothing from you."],
+      ["eye", "Legs", "Continuous scales instead of stacked rings", "you", "The five raised rings on each shank go, which frees 2,880 triangles. The continuous scale pattern is then painted in #20 (textures).", "Your answer to \"When should the leg rings go?\"", {"src": "docs/art/reviews/goose-v2-form-prototype/hip.png", "alt": "Untextured hip with a thigh mass, feathers over it and no leg rings", "caption": "Throwaway test: thigh muscle and feathers, with no leg rings."}]
+    ]
+  },
+  "changes": [
+    ["chg", "Triangle budget", "Fits without raising the 300,000 budget.", ["297,820 used, 2,180 free", "297,388 with ribs under the skin, or 299,108 with bone breaking through"], "Measured in the throwaway test. The fused skin stays capped at 75,000.", null, null],
+    ["chg", "Ribs on the flanks", "Bars on top become ridges under the skin.", ["10 bone tubes sitting on the flanks", "Ridges in the skin, with bone through the middle if you choose it"], "The torn skin around exposed bone is painted in #20 (textures).", null, null, {"before": {"src": "docs/art/reviews/goose-v2-joins/wing_root.png", "alt": "The current version 2 flank, with ribs sitting on top like bars"}, "after": {"src": "docs/art/reviews/goose-v2-form-prototype/ribs_torn_flank.png", "alt": "Untextured test flank with rib ridges and bone breaking through"}, "caption": "The current model, then the test with bone breaking through (untextured)."}],
+    ["keep", "Necks, heads, wings and crowns", "Unchanged.", null, "The necks you passed in QA, the heads, the wing feathers and the dead maple crowns are not touched. Version 1 is not touched either.", null, null]
+  ],
+  "choices": [
+    ["ribs", "How should the ribs show?", [
+      ["A", "Ridges under the skin only", 0, "A starved animal with the ribs straining against the skin. Total: 297,388 triangles.", {"src": "docs/art/reviews/goose-v2-form-prototype/ribs_under_flank.png", "alt": "Rib ridges under the skin", "caption": "Option A: ridges under the skin only."}],
+      ["B", "Ridges, with bare bone tearing through the middle", 1, "The middle third of each rib breaks out of the skin, matching the torn skin the review asked for. Total: 299,108 triangles, leaving 892.", {"src": "docs/art/reviews/goose-v2-form-prototype/ribs_torn_flank.png", "alt": "Rib ridges with bone breaking through", "caption": "Option B: ridges with bare bone tearing through the middle."}]
+    ], "I suggest option B (bone tearing through), because the approved review asked for torn skin and it matches the bone spikes you chose for the necks. It leaves only 892 triangles, so #20 (textures) and #21 (the rig) must add no new triangles."],
+    ["legs", "When should the leg rings go?", [
+      ["A", "Now, with scales painted in #20", 1, "The rings go in #19, and the legs look smooth until #20 paints the continuous scales."],
+      ["B", "Keep them until #20 is ready", 0, "The legs keep their rings for now, so the 2,880 triangles they would free stay used and the feathers no longer fit."]
+    ], "I suggest option A (remove them now), because the feathers over the joins only fit if the rings go."]
+  ],
+  "wrapup": {
+    "summary": "How #19 reshapes the goose v2 body inside the triangle budget: muscle, sag, folds, ribs under the skin and feathers over the joins.",
+    "changing": "Nothing yet. If you approve, goose_design.py's version 2 mode gains the muscle, folds, under-skin ribs and feathers, goose_skin.py smooths only the original joins, and goose_v2 is rebuilt.",
+    "blocking": "Your answers to the two questions.",
+    "next": "Once you approve, I file the step issues under #19, send a short build plan, build it and send you a QA page.",
+    "todo": ["Pick an answer for each of the two questions under Choices.", "Tap <b>Copy my reply</b>.", "Send it with \"Design approved: goose v2 form\", or say what you want changed."]
+  }
+}

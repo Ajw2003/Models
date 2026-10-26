@@ -1,0 +1,36 @@
+{
+  "title": "Goose v2 Skin QA",
+  "eyebrow": "Ready for your check · Models #18, one fused skin and a neck root that forks into three · built on claude/project-thread-09ugci, not pushed",
+  "qa": {
+    "feature": "goose v2 skin",
+    "base": "origin/AjsAgent/import-models",
+    "unverified": [
+      "Nobody has opened goose_v2.glb or goose_v2.fbx in a game engine; the only thing that has run is the export from Blender",
+      "The colour on the skin is a stand-in carried over from version 1: a hard, ragged black-to-pale line crosses the breast and a few stray black marks sit on it, which #20 (textures) replaces",
+      "The rig and clips are not on the new model yet; that work is #21 (the rig), so nobody has seen the model bend",
+      "The whole model is 294,828 triangles, so #19 (muscle and feathers) has only 5,172 triangles left, not the 15,000 the plan estimated, and will have to trim elsewhere"
+    ]
+  },
+  "short": {
+    "lead": "The version 2 goose is built. The body, the three necks, both wing arms and both legs are now one closed skin. One neck root rises from the chest and forks into three at 3.05 m (the root's top in spec.json). The build checks these on every run: 294,828 triangles against the 300,000 budget, 6.750 m tall, and a skin of exactly 1 piece. Version 1's files are unchanged.",
+    "hint": "Tap a step to see what was checked and what it needs from you.",
+    "key": [["Done", "done"], ["Needs you", "you"]],
+    "items": [
+      ["check", "Skin", "One closed skin with smoothed joins", "done", "The close-ups, taken from the same cameras as the version 1 review, show no seam lines at the neck base, the side necks, the wing roots or the hips. The model went from 1,071 closed pieces to 1,064, because the 8 separate body parts (body, three necks, two wing arms, two legs) became 1.", "Nothing from you.", {"src": "docs/art/reviews/goose-v2-joins/neck_base_front.png", "alt": "Version 2 neck base: one root forking into three necks with no seam where it meets the body", "caption": "Version 2, neck base from the front."}],
+      ["hammer", "Wing fix", "The wing arms now reach into the body", "done", "The new one-piece check failed on the first build: the skin came out in 3 pieces, because version 1's wing arms stop 0.1 m short of the body. In version 2 each arm now starts inside the body, at (0.35, -0.5, 2.4). The feathers still hang from the same shoulder, elbow, wrist and tip, so the wing has not moved.", "Nothing from you.", {"src": "docs/art/reviews/goose-v2-joins/wing_root.png", "alt": "Version 2 wing root flowing into the body", "caption": "Version 2, wing root."}],
+      ["eye", "Review", "Look at the review sheet", "you", "The sheet shows the concept at the top, the four goose_v2 views below it, then a row of version 1 join close-ups above the same shots of version 2.", "You check the sheet and say whether the shape passes.", {"src": "docs/art/reviews/goose-v2-review.png", "alt": "Review sheet: the concept, four views of goose_v2, and version 1 and version 2 join close-ups", "caption": "docs/art/reviews/goose-v2-review.png"}]
+    ]
+  },
+  "changes": [
+    ["chg", "Neck base", "One root instead of three tubes.", ["Three necks pushed into an egg", "One root forking into three"], "Rendered by docs/art/reviews/goose-joins/render_joins.py with --blend art/goose/goose_v2.blend.", null, null, {"before": {"src": "docs/art/reviews/goose-joins/neck_base_side.png", "alt": "Version 1 neck base from the side"}, "after": {"src": "docs/art/reviews/goose-v2-joins/neck_base_side.png", "alt": "Version 2 neck base from the side"}, "caption": "The neck base from the side, version 1 then version 2."}],
+    ["chg", "Hip", "The legs grow out of the belly.", ["A thin leg ending at the belly", "The same leg fused into the belly"], "Feathered thighs and continuous scales come in #19 (muscle and feathers).", null, null, {"before": {"src": "docs/art/reviews/goose-joins/leg_hip.png", "alt": "Version 1 hip"}, "after": {"src": "docs/art/reviews/goose-v2-joins/leg_hip.png", "alt": "Version 2 hip"}, "caption": "The hip, version 1 then version 2."}],
+    ["keep", "Version 1", "Unchanged.", null, "git status shows goose.blend, .glb, .fbx and textures/ untouched. A copy of the scripts, run in a scratch folder, still built version 1 with 1,072 design parts (one of them is the painted brand, so 1,071 are geometry) and 272,380 triangles.", null, null]
+  ],
+  "wrapup": {
+    "summary": "Models #18 is built: goose_v2 with one fused skin and a neck root that forks into three.",
+    "changing": "goose_v2.blend, .glb and .fbx, textures_v2/, goose_skin.py, a --v2 flag in build_goose.py and a v2 block in spec.json. Version 1 is unchanged.",
+    "blocking": "Your check of the review sheet, and your go-ahead to push the branch.",
+    "next": "Once you pass it, I push claude/project-thread-09ugci and start #19 (muscle, sag, ribs under the skin, feathers over the joins, feathered thighs).",
+    "todo": ["Look at the review sheet and the close-ups.", "Send \"QA passed: goose v2 skin\", or say what to change."]
+  }
+}

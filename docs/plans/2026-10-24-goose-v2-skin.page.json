@@ -1,0 +1,44 @@
+{
+  "title": "Goose v2 Skin",
+  "eyebrow": "Build plan for approval · Models issue #18, one fused skin and a neck root that forks into three · nothing changed yet",
+  "approval": "Build plan approved: goose v2 skin",
+  "short": {
+    "lead": "This is the first step of the goose version 2 model (issue #17), and the step that unblocks #19 (muscle and feathers), #20 (textures) and #21 (the rig). Today the goose is 1,072 separate pieces, with each neck, wing and leg pushed into an egg-shaped body. I built a quick throwaway test that melts the soft parts into one closed skin and gives the neck a single root that forks into three. It ran in 5 seconds, with no holes in the surface. The pictures below come from that test, untextured. Your answers to the three choices below decide how I do the real build.",
+    "hint": "Tap a step to see what it does and what it needs from you.",
+    "key": [["I build it", ""], ["Needs you first", "you"]],
+    "items": [
+      ["bulb", "Neck root", "One root rising from the chest that forks into three", "", "The main neck and the two side necks start from one thick root, about 1.5 m wide at the chest, that splits into three just above the breast. The three heads stay exactly where version 1 has them, so the height stays 6.75 m and the rig in #21 only has to move the neck bones.", "Your answer to the question on fork height.", {"src": "docs/art/reviews/goose-v2-prototype/fork_neck_root.png", "alt": "Untextured test render of a single thick neck root splitting into three necks above a smooth body", "caption": "The throwaway test: one root, forking at about 3.05 m."}],
+      ["hammer", "Fused skin", "Melt the soft parts into one closed skin", "", "The body, the three necks, both wing arms and both legs are merged into one surface. Each join is then smoothed into a wide curve, about 0.3 m across, so the body flows into the neck instead of meeting it at an edge. The tail end of the body is already part of the body tube, so it joins automatically. The hard details stay their own pieces: the teeth, ribs, claws, crowns, feathers, toes and scale rings, and the heads.", "Your answer to the question on method.", {"src": "docs/art/reviews/goose-v2-prototype/wing_root_fused.png", "alt": "Untextured test render of the wing arm flowing into the body", "caption": "The throwaway test at the wing root: no seam line."}],
+      ["check", "Checks", "Add a one-shell check to the validator", "", "The existing checks still run on the new model: triangle budget, height, nothing below the floor and every piece closed. A new check counts the soft skin's separate pieces and refuses to export unless it is exactly one. The skin is capped at 75,000 triangles. The soft parts use 62,452 today, so the whole model lands near 285,000 of the 300,000 budget, which leaves about 15,000 triangles for #19 (muscle and feathers). #19 can trim elsewhere if it needs more.", "Nothing from you."],
+      ["eye", "Review", "Join close-ups and a review sheet for you to look at", "you", "The close-up script already in docs/art/reviews/goose-joins/ is re-run on goose_v2, from the same camera angles, so you can compare version 1 and version 2 side by side. Four views and a review sheet beside the concept follow, as #18 asks.", "You look at the sheet when the issue moves to needs review."]
+    ]
+  },
+  "changes": [
+    ["keep", "Version 1 goose", "Untouched.", null, "goose.blend, goose.glb, goose.fbx, textures/, the version 1 rig and every clip stay byte-for-byte as they are. The build is checked with git status before the commit.", null, null],
+    ["chg", "art/goose/spec.json", "Gains a version 2 block.", ["Version 1 design numbers only", "Plus a v2 block: the neck root path and radii, the fork height, the join smoothing width and the skin's triangle cap"], "Version 1 reads the same numbers as before; only the version 2 mode reads the new block.", null, null],
+    ["chg", "art/goose/goose_design.py", "Gains a version 2 mode for the forking neck.", ["Three separate necks from the breast", "In v2 mode: one root tube from the chest, with the three necks starting from its top"], "The heads, hackles and neck spines are placed along the new necks the same way as today. The concept sheet (draw_concept.py) can draw the version 2 design from the same parts.", null, null],
+    ["chg", "art/goose/build_goose.py", "Gains a --v2 flag that fuses the skin and writes goose_v2 files.", ["One mesh of 1,072 closed pieces", "With --v2: one fused skin plus the separate hard pieces, written to goose_v2.blend, .glb and .fbx"], "Without the flag it builds exactly what it builds today.", null, null, {"before": {"src": "docs/art/reviews/goose-joins/neck_base_front.png", "alt": "Version 1: three neck tubes pushed into an egg-shaped body"}, "after": {"src": "docs/art/reviews/goose-v2-prototype/fork_neck_root.png", "alt": "Throwaway test: one neck root forking into three, untextured"}, "caption": "Version 1 today, then the throwaway test from the same camera. The test is untextured."}],
+    ["new", "Version 2 model files", "goose_v2.blend, goose_v2.glb and goose_v2.fbx.", null, "Built beside version 1, with its four review views and a review sheet in docs/art/reviews/.", ["Only version 1 exists.", "The fused, forking version 2 model.", "#19 (muscle and feathers) can start on it."], null]
+  ],
+  "choices": [
+    ["method", "How should the soft parts be fused?", [
+      ["A", "Melt them together, then smooth the joins", 1, "Rebuild the soft parts as one surface on a fine 2.2 cm grid, then smooth only the vertices within 0.3 m of a join. This is what the test did: the surface came out closed in both test runs, and the join width is one number.", {"src": "docs/art/reviews/goose-v2-prototype/three_necks_fused.png", "alt": "Untextured test render of three necks fused smoothly into the body", "caption": "Method A on today's three necks."}],
+      ["B", "Cut and stitch the original surfaces", 0, "Keep each part's original surface and cut and stitch them where they cross. This keeps the version 1 surface layout everywhere except at the joins. With eight tubes meeting, the cutting and stitching fails easily, and a stitched crease needs extra work to look like muscle."]
+    ], "I suggest option A (melt and smooth). The test already passed the closed-surface check, and #20 (textures) re-bakes the textures across the whole skin anyway, so losing the original surface layout costs nothing."],
+    ["fork", "Where should the neck root split into three?", [
+      ["A", "Just above the breast, at about 3.05 m", 1, "A short, massive root. The side necks stay long enough to swing their heads in the attack clips.", {"src": "docs/art/reviews/goose-v2-prototype/whole_fused.png", "alt": "Untextured test render of the whole goose with the neck forking low", "caption": "The test with the fork at about 3.05 m."}],
+      ["B", "Halfway up, at about 3.5 m", 0, "A taller trunk, closer to how a hydra is drawn. The side heads sit at 4.05 m, so each side neck would be only about 0.55 m long, which would look stubby and limit their swing."]
+    ], "I suggest option A (just above the breast), because the side heads are only 4.05 m up."],
+    ["texture", "How should goose_v2 be textured until #20 is done?", [
+      ["A", "Carry version 1's colours over as a stand-in", 1, "Each point of the new skin takes its colour and pattern from the nearest version 1 surface, baked into art/goose/textures_v2/. It looks like today's goose, with soft colour changes at the joins, and #20 replaces it."],
+      ["B", "Leave it untextured until #20", 0, "Faster, and nothing is baked twice. The review sheet then shows a grey model next to the concept."]
+    ], "I suggest option A (carry the colours over), because #18 asks for a review sheet beside the concept, and a grey model is hard to judge against it."]
+  ],
+  "wrapup": {
+    "summary": "A build plan for Models issue #18: the soft parts melted into one closed skin, with one neck root that forks into three, built beside version 1.",
+    "changing": "spec.json, goose_design.py and build_goose.py gain a version 2 mode, and goose_v2.blend, .glb and .fbx are added. Version 1 is not rebuilt.",
+    "blocking": "Your answers to the three questions. Nothing else waits.",
+    "next": "Once you approve, I build it on the claude/project-thread-09ugci branch (based on AjsAgent/import-models) and render the close-ups and the review sheet. #18 then moves to needs review. I ask before pushing or opening a pull request.",
+    "todo": ["Pick an answer for each of the three questions under Choices.", "Tap <b>Copy my reply</b>.", "Send it with \"Build plan approved: goose v2 skin\", or say what you want changed."]
+  }
+}
