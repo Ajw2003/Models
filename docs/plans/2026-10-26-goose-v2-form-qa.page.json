@@ -1,0 +1,36 @@
+{
+  "title": "Goose v2 Form QA",
+  "eyebrow": "Ready for your check · Models issue #19 (the goose v2 form), steps #29 and #30 · pushed to pull request #28",
+  "qa": {
+    "feature": "goose v2 form",
+    "base": "origin/AjsAgent/import-models",
+    "unverified": [
+      "Under the stand-in colour, the chest and shoulder muscle and the three folds at the neck root read faintly, and the 22 black hackles at the neck root blend into the black neck. issue #20 (textures) is where they get their own colour",
+      "The torn skin around each bare rib is not painted yet; that is issue #20 (textures)",
+      "Nobody has opened goose_v2.glb or goose_v2.fbx in a game engine; the only step that has run is the export from Blender",
+      "Only 812 triangles are left in the 300,000-triangle budget, so issue #20 (textures) and issue #21 (the rig) must add none"
+    ]
+  },
+  "short": {
+    "lead": "The goose v2 body is rebuilt as you approved. Each rib is now a ridge in the skin with bare bone tearing out of its middle, the leg rings are gone, and feathers hang over the thighs and shoulders. Muscle, a sagging belly and folds at the neck root are part of the skin. The build passed all its checks: 299,188 triangles against the 300,000 budget, 6.750 m tall, and a skin that is still one piece. Version 1 is unchanged.",
+    "hint": "Tap a step to see what was checked and what it needs from you.",
+    "key": [["Done", "done"], ["Needs you", "you"]],
+    "items": [
+      ["check", "Ribs", "Bare bone tearing through the flank", "done", "The first rebuild hid the bone inside its ridge, because both sat on the same line. The bone is now lifted outward in the middle of each rib, so it breaks clear of the skin and sinks back in at both ends.", "Nothing from you.", {"src": "docs/art/reviews/goose-v2-form/flank_side.png", "alt": "The flank with dark rib ridges and a pale bone breaking out of the middle of each", "caption": "The flank: ridges with bare bone."}],
+      ["eye", "Hip", "Thigh feathers and smooth shanks", "done", "Ragged feathers hang over each thigh and hide where the leg meets the belly. The five rings on each shank are gone; Issue #20 (textures) paints scales there.", "Nothing from you.", {"src": "docs/art/reviews/goose-v2-form/hip.png", "alt": "The hip with feathers hanging over the thigh and a smooth shank", "caption": "The hip."}],
+      ["list", "Your check", "Look at the close-ups and the review sheet", "you", "The sheet docs/art/reviews/goose-v2-review.png shows the concept, the four views and the join close-ups. Say whether the body now reads as a starved, living animal.", "Send \"QA passed: goose v2 form\", or say what to change.", {"src": "docs/art/reviews/goose-v2-review.png", "alt": "Review sheet for goose_v2 with the new form", "caption": "The review sheet."}]
+    ]
+  },
+  "changes": [
+    ["chg", "Flank and hip", "Rib bars and leg rings became ridges, bone and feathers.", ["Rib bars on the flank and rings on the shank", "Rib ridges with bare bone, thigh feathers and a smooth shank"], "Both images use the same camera position.", null, null, {"before": {"src": "docs/art/reviews/goose-v2-form/before_leg_hip.png", "alt": "Before: rib bars on the flank and ringed shanks"}, "after": {"src": "docs/art/reviews/goose-v2-joins/leg_hip.png", "alt": "After: rib ridges with bone, thigh feathers and smooth shanks"}, "caption": "Before, then after."}],
+    ["chg", "Chest", "Muscle, a sagging belly and folds at the neck root.", ["A smooth egg-shaped body", "Breast muscle and a hanging belly"], "Under the stand-in colour, the muscle and folds read faintly from the front.", null, null, {"before": {"src": "docs/art/reviews/goose-v2-form/before_neck_base_front.png", "alt": "Before: the chest from the front"}, "after": {"src": "docs/art/reviews/goose-v2-form/chest_front.png", "alt": "After: the chest with breast muscle and a sagging belly"}, "caption": "Before, then after."}],
+    ["keep", "Necks, heads, wings and crowns", "Unchanged.", null, "The parts you passed in QA are untouched. Version 1 still gives 1,072 parts and 272,380 triangles.", null, null]
+  ],
+  "wrapup": {
+    "summary": "The goose v2 form is built: muscle, a sagging belly, ribs with bare bone tearing through, smooth shanks and feathers over the joins.",
+    "changing": "spec.json, goose_design.py and goose_skin.py, the goose_v2 files and their renders, pushed to pull request #28.",
+    "blocking": "Your QA check of the close-ups and the review sheet.",
+    "next": "Once you pass it, I start issue #20 (textures): colour across the joins, the torn skin and the leg scales.",
+    "todo": ["Look at the close-ups and the review sheet.", "Send \"QA passed: goose v2 form\", or say what to change."]
+  }
+}
