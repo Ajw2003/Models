@@ -5,7 +5,7 @@
     "feature": "goose v2 form",
     "base": "origin/AjsAgent/import-models",
     "unverified": [
-      "Under the stand-in colour, the chest and shoulder muscle and the three folds at the neck root read faintly, and the 22 black hackles at the neck root blend into the black neck. issue #20 (textures) is where they get their own colour",
+      "Under the stand-in colour, the chest and shoulder muscle and the three folds at the neck root read faintly, and the 22 black hackles there blend into the black neck. issue #20 (textures) is where they get their own colour",
       "The torn skin around each bare rib is not painted yet; that is issue #20 (textures)",
       "Nobody has opened goose_v2.glb or goose_v2.fbx in a game engine; the only step that has run is the export from Blender",
       "Only 812 triangles are left in the 300,000-triangle budget, so issue #20 (textures) and issue #21 (the rig) must add none"
@@ -23,7 +23,7 @@
   },
   "changes": [
     ["chg", "Flank and hip", "Rib bars and leg rings became ridges, bone and feathers.", ["Rib bars on the flank and rings on the shank", "Rib ridges with bare bone, thigh feathers and a smooth shank"], "Both images use the same camera position.", null, null, {"before": {"src": "docs/art/reviews/goose-v2-form/before_leg_hip.png", "alt": "Before: rib bars on the flank and ringed shanks"}, "after": {"src": "docs/art/reviews/goose-v2-joins/leg_hip.png", "alt": "After: rib ridges with bone, thigh feathers and smooth shanks"}, "caption": "Before, then after."}],
-    ["chg", "Chest", "Muscle, a sagging belly and folds at the neck root.", ["A smooth egg-shaped body", "Breast muscle and a hanging belly"], "Under the stand-in colour, the muscle and folds read faintly from the front.", null, null, {"before": {"src": "docs/art/reviews/goose-v2-form/before_neck_base_front.png", "alt": "Before: the chest from the front"}, "after": {"src": "docs/art/reviews/goose-v2-form/chest_front.png", "alt": "After: the chest with breast muscle and a sagging belly"}, "caption": "Before, then after."}],
+    ["chg", "Chest", "Breast muscle, a sagging belly and three skin folds.", ["A smooth egg-shaped body", "Breast muscle and a hanging belly"], "Under the stand-in colour, the muscle and folds read faintly from the front.", null, null, {"before": {"src": "docs/art/reviews/goose-v2-form/before_neck_base_front.png", "alt": "Before: the chest from the front"}, "after": {"src": "docs/art/reviews/goose-v2-form/chest_front.png", "alt": "After: the chest with breast muscle and a sagging belly"}, "caption": "Before, then after."}],
     ["keep", "Necks, heads, wings and crowns", "Unchanged.", null, "The parts you passed in QA are untouched. Version 1 still gives 1,072 parts and 272,380 triangles.", null, null]
   ],
   "wrapup": {
