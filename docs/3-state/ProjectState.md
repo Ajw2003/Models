@@ -29,8 +29,12 @@
   segmentation from behind (`docs/art/reviews/goose-v2-necks/`).
   aj liked the necks; on 2026-10-25 the maple leaf brand was removed from version 2 (1,093 parts,
   still 297,820 triangles; version 1 keeps its brand and rebuilds at 272,380).
-- #19, #20 and #21: not started; #19 has 2,180 triangles of headroom, so it has to trim elsewhere.
-  #21 now asks for one bone per vertebra (15 and 12).
+- #19 form (steps #29, #30): built on 2026-10-26, waits on aj's QA check. Muscle, a sagging belly,
+  neck-root folds, rib ridges with bare bone through the middle, no shank rings, and feathers over
+  the joins. `build_goose.py --v2` gives 1,169 parts, 299,188 triangles (812 under budget),
+  6.750 m, skin 1 piece. Close-ups: `docs/art/reviews/goose-v2-form/`. Under the stand-in colour
+  the chest muscle and folds read faintly and the black hackles blend into the black neck.
+- #20 and #21: not started; they must add no triangles. #21 asks for one bone per vertebra (15 and 12).
 
 ## The one thing that is not what it looks like
 

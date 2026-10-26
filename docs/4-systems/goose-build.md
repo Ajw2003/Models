@@ -60,5 +60,14 @@ main neck and 12 on each side neck, each a ridge under the skin (strongest along
 bone spike tearing out of it, in place of version 1's 13 neck spikes. #21 rigs one bone per
 vertebra.
 
+Form (#19, design `docs/plans/2026-10-25-goose-v2-form.html`, approved 1B 2A): a `v2.design.form`
+block adds breast, shoulder and thigh muscle, a sagging belly and three folds at the neck root as
+parts marked `fuse`, which `build_goose.py --v2` melts into the skin alongside `v2.skin.parts`;
+`goose_skin.fuse` smooths only where the listed parts meet, so the muscle keeps its shape. With
+`v2.design.ribs`, `body_ribs` turns each rib into a fused ridge and lifts its middle third out as
+bare bone (`bone_lift`). `v2.design.legs.scutes` false drops the shank rings. The form block also
+adds 22 hackles at the neck root, 9 coverts per shoulder and 13 feathers per thigh, from its own
+random seed so the other parts' feathers do not change.
+
 Brand: `goose_texture.bake(..., version=)` takes its decal from that version's parts; version 2 sets
 `v2.design.maple.brand` to null, so its breast has no maple leaf and the brand shader step is skipped.

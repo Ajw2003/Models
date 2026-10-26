@@ -1,3 +1,13 @@
+# Today — 2026-10-26
+
+**Done:** aj approved the goose v2 form design (1B 2A) and its build plan. Built #19 (#29, #30):
+299,188 triangles, skin 1 piece. The first rebuild buried the bare rib bone inside its ridge, so the
+bone is now lifted out mid-rib (`v2.design.ribs.bone_lift`).
+
+**Next, in order:** aj's QA check of #19; then #20 (textures) and #21 (the rig), adding no triangles.
+
+---
+
 # Today — 2026-10-25
 
 **Done:** removed the maple leaf brand from goose_v2's breast, after aj said it looked comical
