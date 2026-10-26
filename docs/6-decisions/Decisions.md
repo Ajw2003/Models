@@ -3,6 +3,28 @@
 The running log of what was decided in this repo, when and why. Newest entry at the top. Entries
 are never rewritten; a later decision flips an old entry's Status to Superseded with a pointer.
 
+## 2026-10-26 — Goose v2 form: muscle, sag, ribs with bone tearing through, feathers over the joins
+
+**Context.** #19 gives the fused version 2 body the shape of a starved, living animal, but only
+2,180 triangles were left of the 300,000 budget and the feathers over the joins cost 7,128. The
+proposal, with a throwaway test, is `docs/plans/2026-10-25-goose-v2-form.html`.
+
+**Decision.** aj approved "Design approved: goose v2 form 1B 2A":
+
+- Ribs (question 1): option B, the 10 rib bars become ridges inside the skin, and the middle third
+  of each rib breaks out as bare bone. The torn skin around it is painted in #20.
+- Leg rings (question 2): option A, the five rings on each shank go now; #20 paints continuous
+  scales.
+
+Muscle at the chest, shoulders and thighs, a sagging belly, three folds at the neck root and the
+feathers over the joins (22 hackles, 9 coverts per shoulder, 13 feathers per thigh) come with it.
+
+**Why.** Turning the rib bars and leg rings into skin pays for the feathers; the exposed bone
+matches the neck spikes aj chose. Rejected: ridges alone; keeping the rings until #20. It leaves
+892 triangles, so #20 and #21 must add none.
+
+**Status.** Standing. It adds to the 2026-10-24 goose v2 skin and necks entries below.
+
 ## 2026-10-25 — No maple leaf brand on the goose v2 breast
 
 **Context.** Looking at the version 2 necks, aj said the maple leaf brand on the breast "looks
